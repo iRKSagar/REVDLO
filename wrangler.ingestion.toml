@@ -1,0 +1,9 @@
+name = "mr-oldverdict-ingestion"
+main = "ingestion-worker/src/index.js"
+compatibility_date = "2024-01-01"
+
+[triggers]
+crons = ["0 6 * * *"]
+
+[vars]
+WORKER_DOMAIN = "ingestion.rkinfoarch.workers.dev"
