@@ -1,13 +1,13 @@
 // Mr. Oldverdict Ingestion Worker
 // Pulls top posts from Reddit subreddits
-// Scores them for virality, filters blacklist, assigns category, stores in Supabase
+// Reduced to 2 subreddits per category to stay within Cloudflare free tier subrequest limits
 
 const SUBREDDITS = {
-  A: ['mildlyinfuriating', 'firstworldproblems', 'technicallythetruth', 'humansbeingbros'],
-  B: ['antiwork', 'jobs', 'careerguidance', 'WorkReform', 'LinkedInLunatics'],
-  C: ['relationship_advice', 'AmItheAsshole', 'confession', 'lonely'],
-  D: ['nosurf', 'digitalminimalism', 'Showerthoughts', 'Adulting'],
-  E: ['Showerthoughts', 'Stoicism', 'history']
+  A: ['mildlyinfuriating', 'firstworldproblems'],
+  B: ['antiwork', 'LinkedInLunatics'],
+  C: ['AmItheAsshole', 'confession'],
+  D: ['nosurf', 'Showerthoughts'],
+  E: ['Stoicism', 'history']
 };
 
 const BLACKLIST_KEYWORDS = [
@@ -26,7 +26,6 @@ function passesBlacklist(text) {
 }
 
 function cleanTitle(title) {
-  // Remove special characters and clean up the title for use as a raw topic
   return title
     .replace(/[^\w\s.,?!'-]/g, '')
     .replace(/\s+/g, ' ')
@@ -35,61 +34,50 @@ function cleanTitle(title) {
 }
 
 async function fetchSubredditPosts(subreddit) {
-  // Use Reddit public JSON API - no key required
-  const url = `https://www.reddit.com/r/${subreddit}/hot.json?limit=10&t=day`;
-  
+  const url = `https://www.reddit.com/r/${subreddit}/hot.json?limit=5&t=day`;
   try {
     const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'MrOldverdict-Bot/1.0'
-      }
+      headers: { 'User-Agent': 'MrOldverdict-Bot/1.0' }
     });
-
     if (!response.ok) return [];
-
     const data = await response.json();
     const posts = data?.data?.children || [];
-
     return posts
       .filter(post => !post.data.stickied && !post.data.over_18)
       .map(post => ({
         title: cleanTitle(post.data.title),
         score: post.data.score,
         comments: post.data.num_comments,
-        subreddit: post.data.subreddit,
-        url: `https://reddit.com${post.data.permalink}`
+        subreddit: post.data.subreddit
       }))
       .filter(post => post.title.length > 20);
-
   } catch (error) {
-    console.error(`Failed to fetch r/${subreddit}:`, error.message);
     return [];
   }
 }
 
 function calculateEngagementScore(post) {
-  // Weighted score: upvotes + (comments * 3)
-  // Comments weighted higher because they indicate stronger reaction
   return post.score + (post.comments * 3);
 }
 
 async function topicAlreadyExists(supabaseUrl, supabaseKey, title) {
-  // Check if a very similar topic was ingested in the last 7 days
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  
-  const response = await fetch(
-    `${supabaseUrl}/rest/v1/topics?raw_topic=ilike.*${encodeURIComponent(title.substring(0, 30))}*&created_at=gte.${sevenDaysAgo}&limit=1`,
-    {
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`
+  try {
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/topics?raw_topic=ilike.*${encodeURIComponent(title.substring(0, 20))}*&created_at=gte.${sevenDaysAgo}&limit=1`,
+      {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`
+        }
       }
-    }
-  );
-
-  if (!response.ok) return false;
-  const existing = await response.json();
-  return existing.length > 0;
+    );
+    if (!response.ok) return false;
+    const existing = await response.json();
+    return existing.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 async function storeTopic(supabaseUrl, supabaseKey, topic) {
@@ -109,7 +97,6 @@ async function storeTopic(supabaseUrl, supabaseKey, topic) {
       blacklist_cleared: true
     })
   });
-
   return response.ok;
 }
 
@@ -130,35 +117,26 @@ async function runIngestion(env) {
       results.fetched += posts.length;
 
       for (const post of posts) {
-        // Blacklist check
         if (!passesBlacklist(post.title)) continue;
         results.passed_blacklist++;
-
-        // Calculate engagement score
-        const engagementScore = calculateEngagementScore(post);
-
         categoryPosts.push({
           ...post,
           category,
-          engagementScore
+          engagementScore: calculateEngagementScore(post)
         });
       }
     }
 
-    // Sort by engagement score, take top 5 per category
-    const top5 = categoryPosts
+    const top3 = categoryPosts
       .sort((a, b) => b.engagementScore - a.engagementScore)
-      .slice(0, 5);
+      .slice(0, 3);
 
-    for (const post of top5) {
-      // Duplicate check
+    for (const post of top3) {
       const isDuplicate = await topicAlreadyExists(env.SUPABASE_URL, env.SUPABASE_KEY, post.title);
       if (isDuplicate) {
         results.skipped_duplicate++;
         continue;
       }
-
-      // Store in Supabase
       const stored = await storeTopic(env.SUPABASE_URL, env.SUPABASE_KEY, post);
       if (stored) {
         results.stored++;
@@ -172,7 +150,6 @@ async function runIngestion(env) {
 
 export default {
   async fetch(request, env) {
-    // Health check
     if (request.method === 'GET') {
       return new Response(JSON.stringify({ status: 'Ingestion worker standing by.' }), {
         headers: { 'Content-Type': 'application/json' }
@@ -183,7 +160,6 @@ export default {
       return new Response('Method not allowed', { status: 405 });
     }
 
-    // Auth check
     const authHeader = request.headers.get('Authorization');
     if (authHeader !== `Bearer ${env.COUNCIL_SECRET}`) {
       return new Response('Unauthorized', { status: 401 });
@@ -191,7 +167,6 @@ export default {
 
     try {
       const results = await runIngestion(env);
-
       return new Response(JSON.stringify({
         success: true,
         message: 'Ingestion complete.',
@@ -199,18 +174,14 @@ export default {
       }), {
         headers: { 'Content-Type': 'application/json' }
       });
-
     } catch (error) {
-      return new Response(JSON.stringify({
-        error: error.message
-      }), {
+      return new Response(JSON.stringify({ error: error.message }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
       });
     }
   },
 
-  // Runs once daily at 6 AM UTC - feeds topics before the 11 AM publish window
   async scheduled(event, env, ctx) {
     ctx.waitUntil(
       fetch(`https://${env.WORKER_DOMAIN}/`, {
