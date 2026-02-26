@@ -6,7 +6,7 @@ compatibility_date = "2024-01-01"
 crons = ["0 6 * * *"]
 
 [vars]
-WORKER_DOMAIN = "mr-oldverdict-ingestion.rkinfoarch.workers.dev"
+WORKER_DOMAIN = "ingestion.rkinfoarch.workers.dev"
 
 # Secrets needed - add in Cloudflare dashboard:
 # SUPABASE_URL
