@@ -115,7 +115,46 @@ def build_caption_clips(lines, video_duration, video_width, video_height):
     return caption_clips
 
 
-def assemble_video(image_path, audio_path, lines, output_path):
+def build_setup_card(setup_text, video_width, video_height, duration=3.0):
+    """Build a text card clip for the setup line."""
+    try:
+        from moviepy.editor import ColorClip, TextClip, CompositeVideoClip
+
+        # Dark background card
+        bg = ColorClip(size=(video_width, video_height), color=(15, 15, 15)).set_duration(duration)
+
+        # Setup text
+        txt = (TextClip(
+            setup_text,
+            fontsize=46,
+            color='white',
+            font='DejaVu-Sans',
+            method='caption',
+            size=(video_width - 120, None),
+            align='center'
+        )
+        .set_position('center')
+        .set_duration(duration))
+
+        # Small label above
+        label = (TextClip(
+            "Meanwhile, in 2025...",
+            fontsize=28,
+            color='#888888',
+            font='DejaVu-Sans',
+            method='label',
+            align='center'
+        )
+        .set_position(('center', video_height * 0.35))
+        .set_duration(duration))
+
+        return CompositeVideoClip([bg, label, txt], size=(video_width, video_height))
+    except Exception as e:
+        print(f'Setup card failed: {e}')
+        return None
+
+
+def assemble_video(image_path, audio_path, lines, output_path, setup_text=None):
     # Load audio to get duration
     audio = AudioFileClip(audio_path)
     duration = audio.duration
@@ -154,10 +193,20 @@ def assemble_video(image_path, audio_path, lines, output_path):
     # Build caption clips
     caption_clips = build_caption_clips(lines, duration, target_width, target_height)
 
-    # Compose everything
-    all_clips = [image_clip, dark_band] + caption_clips
-    final = CompositeVideoClip(all_clips, size=(target_width, target_height))
-    final = final.set_audio(audio)
+    # Compose main video
+    main_clip = CompositeVideoClip([image_clip, dark_band] + caption_clips, size=(target_width, target_height))
+    main_clip = main_clip.set_audio(audio)
+
+    # Add setup card at the start if provided
+    if setup_text:
+        from moviepy.editor import concatenate_videoclips
+        setup_card = build_setup_card(setup_text, target_width, target_height, duration=3.0)
+        if setup_card:
+            final = concatenate_videoclips([setup_card, main_clip])
+        else:
+            final = main_clip
+    else:
+        final = main_clip
 
     # Write video
     final.write_videofile(
@@ -251,11 +300,12 @@ def assemble():
         # Output path
         output_path = tempfile.mktemp(suffix='.mp4')
 
-        # Get script lines for captions
+        # Get script lines for captions and setup text
         lines = script.get('lines', [])
+        setup_text = script.get('setup', None)
 
         # Assemble video
-        assemble_video(image_path, audio_path, lines, output_path)
+        assemble_video(image_path, audio_path, lines, output_path, setup_text)
 
         # Upload to Supabase
         video_url = upload_video(script_id, output_path)
