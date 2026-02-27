@@ -38,12 +38,13 @@ async function generateAudio(elevenLabsKey, voiceId, text) {
     },
     body: JSON.stringify({
       text: text,
-      model_id: 'eleven_turbo_v2',
+      model_id: 'eleven_v3',
       voice_settings: {
-        stability: 0.85,
+        stability: 0.90,
         similarity_boost: 0.90,
-        style: 0.10,
-        use_speaker_boost: true
+        style: 0.05,
+        use_speaker_boost: true,
+        speed: 0.82
       }
     })
   });
@@ -128,17 +129,21 @@ async function updateVideoRecord(supabaseUrl, supabaseKey, scriptId, audioUrl) {
 
 function buildFullScript(lines) {
   // Combine all lines into one clean text for ElevenLabs
-  // Add natural pause markers using punctuation and spacing
+  // Use SSML-style break markers for natural pauses
+  // ElevenLabs supports <break time="Xs"/> for silence
   return lines
     .map((line, index) => {
       let text = line.text;
-      // Add pause after line if marked
+      // Add a long pause after lines marked pause_after
       if (line.pause_after && index < lines.length - 1) {
-        text += '...';
+        text += ' <break time="1.5s"/> ';
+      } else if (index < lines.length - 1) {
+        text += ' <break time="0.8s"/> ';
       }
       return text;
     })
-    .join(' ');
+    .join('')
+    .trim();
 }
 
 export default {
