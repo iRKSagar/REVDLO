@@ -4,7 +4,7 @@ services:
     runtime: python
     rootDir: assembly-service
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: gunicorn app:app --timeout 300 --workers 1
     envVars:
       - key: SUPABASE_URL
         sync: false
