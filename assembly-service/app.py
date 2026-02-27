@@ -121,6 +121,83 @@ def build_caption_clips(lines, video_duration, video_width, video_height):
     return caption_clips
 
 
+def get_outro_sound_url(supabase_url, supabase_key):
+    try:
+        response = requests.get(
+            f'{supabase_url}/rest/v1/settings?key=eq.outro_sound_url&limit=1',
+            headers={
+                'apikey': supabase_key,
+                'Authorization': f'Bearer {supabase_key}'
+            }
+        )
+        data = response.json()
+        if data and data[0].get('value') and data[0]['value'] != 'PLACEHOLDER':
+            return data[0]['value']
+    except Exception as e:
+        print(f'Failed to fetch outro sound URL: {e}')
+    return None
+
+
+def build_outro_card(video_width, video_height, outro_audio_path=None, duration=3.0):
+    """Build the outro card with Mr. Oldverdict branding."""
+    try:
+        from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, AudioFileClip
+
+        # Dark background
+        bg = ColorClip(size=(video_width, video_height), color=(10, 10, 10)).set_duration(duration)
+
+        # Channel name
+        name_clip = (TextClip(
+            "Mr. Oldverdict",
+            fontsize=58,
+            color='white',
+            font='DejaVu-Sans-Bold',
+            method='label',
+            align='center'
+        )
+        .set_position(('center', video_height * 0.38))
+        .set_duration(duration))
+
+        # Tagline
+        tagline_clip = (TextClip(
+            "Been watching since before.",
+            fontsize=32,
+            color='#aaaaaa',
+            font='DejaVu-Sans',
+            method='label',
+            align='center'
+        )
+        .set_position(('center', video_height * 0.50))
+        .set_duration(duration))
+
+        # Handle
+        handle_clip = (TextClip(
+            "@mroldverdict",
+            fontsize=28,
+            color='#888888',
+            font='DejaVu-Sans',
+            method='label',
+            align='center'
+        )
+        .set_position(('center', video_height * 0.58))
+        .set_duration(duration))
+
+        outro = CompositeVideoClip([bg, name_clip, tagline_clip, handle_clip], size=(video_width, video_height))
+
+        # Add outro sound if available
+        if outro_audio_path and os.path.exists(outro_audio_path):
+            try:
+                outro_audio = AudioFileClip(outro_audio_path).subclip(0, min(duration, AudioFileClip(outro_audio_path).duration))
+                outro = outro.set_audio(outro_audio)
+            except Exception as e:
+                print(f'Outro audio failed: {e}')
+
+        return outro
+    except Exception as e:
+        print(f'Outro card failed: {e}')
+        return None
+
+
 def build_setup_card(setup_text, video_width, video_height, duration=3.0):
     """Build a text card clip for the setup line."""
     try:
@@ -160,7 +237,7 @@ def build_setup_card(setup_text, video_width, video_height, duration=3.0):
         return None
 
 
-def assemble_video(image_path, audio_path, lines, output_path, setup_text=None):
+def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, outro_sound_path=None):
     # Load audio to get duration
     audio = AudioFileClip(audio_path)
     duration = audio.duration
@@ -203,14 +280,24 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None):
     main_clip = CompositeVideoClip([image_clip, dark_band] + caption_clips, size=(target_width, target_height))
     main_clip = main_clip.set_audio(audio)
 
-    # Add setup card at the start if provided
+    # Add setup card at the start and outro card at the end
+    from moviepy.editor import concatenate_videoclips
+    clips = []
+
     if setup_text:
-        from moviepy.editor import concatenate_videoclips
         setup_card = build_setup_card(setup_text, target_width, target_height, duration=3.0)
         if setup_card:
-            final = concatenate_videoclips([setup_card, main_clip])
-        else:
-            final = main_clip
+            clips.append(setup_card)
+
+    clips.append(main_clip)
+
+    outro_audio_path = outro_sound_path
+    outro_card = build_outro_card(target_width, target_height, outro_audio_path=outro_audio_path, duration=3.0)
+    if outro_card:
+        clips.append(outro_card)
+
+    if len(clips) > 1:
+        final = concatenate_videoclips(clips)
     else:
         final = main_clip
 
@@ -291,6 +378,9 @@ def assemble():
         video_record = get_video_record(script_id)
         script = get_script(script_id)
 
+        # Fetch outro sound URL
+        outro_sound_url = get_outro_sound_url(SUPABASE_URL, SUPABASE_KEY)
+
         image_url = video_record.get('image_url')
         audio_url = video_record.get('voice_file_url')
 
@@ -303,6 +393,14 @@ def assemble():
         image_path = download_file(image_url, '.jpg')
         audio_path = download_file(audio_url, '.mp3')
 
+        # Download outro sound if available
+        outro_sound_path = None
+        if outro_sound_url:
+            try:
+                outro_sound_path = download_file(outro_sound_url, '.mp3')
+            except Exception as e:
+                print(f'Outro sound download failed: {e}')
+
         # Output path
         output_path = tempfile.mktemp(suffix='.mp4')
 
@@ -313,7 +411,7 @@ def assemble():
         print(f"Lines: {lines}")
 
         # Assemble video
-        assemble_video(image_path, audio_path, lines, output_path, setup_text)
+        assemble_video(image_path, audio_path, lines, output_path, setup_text, outro_sound_path)
 
         # Upload to Supabase
         video_url = upload_video(script_id, output_path)
