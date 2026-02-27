@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: revdlo-assembly
+    runtime: python
+    rootDir: assembly-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: COUNCIL_SECRET
+        sync: false
+    plan: free
