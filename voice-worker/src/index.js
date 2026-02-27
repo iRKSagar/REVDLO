@@ -101,29 +101,39 @@ async function updateVideoRecord(supabaseUrl, supabaseKey, scriptId, audioUrl) {
 
   if (existing.length > 0) {
     // Update existing record
-    await fetch(`${supabaseUrl}/rest/v1/videos?script_id=eq.${scriptId}`, {
+    const updateRes = await fetch(`${supabaseUrl}/rest/v1/videos?script_id=eq.${scriptId}`, {
       method: 'PATCH',
       headers: {
         'apikey': supabaseKey,
         'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
       },
       body: JSON.stringify({ voice_file_url: audioUrl })
     });
+    if (!updateRes.ok) {
+      const err = await updateRes.text();
+      throw new Error(`Video record update failed: ${err}`);
+    }
   } else {
     // Create new video record
-    await fetch(`${supabaseUrl}/rest/v1/videos`, {
-      method: 'PUT',
+    const insertRes = await fetch(`${supabaseUrl}/rest/v1/videos`, {
+      method: 'POST',
       headers: {
         'apikey': supabaseKey,
         'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
       },
       body: JSON.stringify({
         script_id: scriptId,
         voice_file_url: audioUrl
       })
     });
+    if (!insertRes.ok) {
+      const err = await insertRes.text();
+      throw new Error(`Video record insert failed: ${err}`);
+    }
   }
 }
 
