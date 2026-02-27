@@ -78,22 +78,24 @@ BLACKLIST TEST - before writing anything ask this
 Does this line require a name, a party, a country, a religion, or a leader to land? If yes rewrite it without those. If it cannot land without naming something specific the topic is dropped entirely.
 
 THE OPENING HOOK RULE
-Every script must start with one short natural sound that hooks the audience before the first line lands. These are real sounds the voice performs. Never bracket markers. Never full words like "sighs" or "laughs".
+Every script must start with one emotion tag that hooks the audience in the first two seconds. These tags are performed by the voice engine as natural sounds not read as words.
 
-Use exactly one of these three based on content.
+Use exactly one based on content.
 
-"Ha." - for absurd modern behavior. Dry. One note. Almost a laugh but not quite.
-"Heh." - for corporate nonsense or theater. Quietly amused. He has seen this performance before.
-"Hmm." - for something he has seen a thousand times. Already past it. The sound of a verdict already made.
+[laughing] - for absurd modern behavior. Dry, barely there. One note of quiet amusement.
+[sighs] - for something he has seen a thousand times. Already past it.
+[clears throat] - for corporate nonsense or bureaucratic theater. About to correct something.
+[exhales] - for universal human foolishness he expected. Almost a laugh but not quite.
+[coughs] - for something particularly stupid. Short, sharp, involuntary.
 
-The hook goes at the very start of line one only. One sound. Then the line. Nothing else before it.
+The tag goes at the very start of line one only. One tag. Then the line immediately after. Nothing else before it.
 
 Example:
-Right: "Hmm. In my day, we called it sitting down and closing our eyes."
-Right: "Ha. We called it dinner. You call it a wellness journey. Same plate."
-Right: "Heh. I once left a note: Gone fishing. Nobody emailed the lake."
+Right: "[sighs] In my day, we called it sitting down and closing our eyes."
+Right: "[laughing] We called it dinner. You call it a wellness journey. Same plate."
+Right: "[clears throat] I once left a note: Gone fishing. Nobody emailed the lake."
 
-Never use more than one hook per script. Never use it on the second line. Never explain or describe the sound. Just write it.
+Never use more than one tag per script. Never put a tag on the second line. Never use Ha, Heh, Hmm or ellipsis as hooks. Only the five tags above.
 
 THE SETUP LINE RULE
 Every script must include a setup line. This is not Mr. Oldverdict speaking. This is a plain dry observation of what is happening in the modern world that he is about to react to. It appears on screen as a text card for three seconds before he speaks.
