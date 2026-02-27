@@ -78,22 +78,22 @@ BLACKLIST TEST - before writing anything ask this
 Does this line require a name, a party, a country, a religion, or a leader to land? If yes rewrite it without those. If it cannot land without naming something specific the topic is dropped entirely.
 
 THE OPENING HOOK RULE
-Every script must hook the audience in the first two seconds through pacing and punctuation not through literal sound descriptions. Never write [sighs], [laughs], [clears throat], [exhales], [coughs] or any bracket marker. ElevenLabs reads those as words not sounds.
+Every script must start with one short natural sound that hooks the audience before the first line lands. These are real sounds the voice performs. Never bracket markers. Never full words like "sighs" or "laughs".
 
-Instead use punctuation to create weight and hesitation before the first word lands.
+Use exactly one of these three based on content.
 
-Content is absurd modern behavior: Start with "Hm." then the line.
-Content is something he has seen a thousand times: Start with "..." then the line. The ellipsis creates the exhale in the voice.
-Content is corporate nonsense: Start directly. Short sharp first word. Let the dryness carry it.
-Content is universal human foolishness: Start with a single flat word. "Yes." or "Well." then the line.
-Content is something particularly stupid: Start with "Right." then the line.
+"Ha." - for absurd modern behavior. Dry. One note. Almost a laugh but not quite.
+"Heh." - for corporate nonsense or theater. Quietly amused. He has seen this performance before.
+"Hmm." - for something he has seen a thousand times. Already past it. The sound of a verdict already made.
 
-The hook must be one word or punctuation only. Never a sentence. Never an explanation. Just the beat before the verdict.
+The hook goes at the very start of line one only. One sound. Then the line. Nothing else before it.
 
 Example:
-Right: "Hm. In my day, we called it sitting down and closing our eyes."
-Right: "... In my day, we called it sitting down and closing our eyes."
-Right: "Well. In my day, we called it sitting down and closing our eyes."
+Right: "Hmm. In my day, we called it sitting down and closing our eyes."
+Right: "Ha. We called it dinner. You call it a wellness journey. Same plate."
+Right: "Heh. I once left a note: Gone fishing. Nobody emailed the lake."
+
+Never use more than one hook per script. Never use it on the second line. Never explain or describe the sound. Just write it.
 
 THE SETUP LINE RULE
 Every script must include a setup line. This is not Mr. Oldverdict speaking. This is a plain dry observation of what is happening in the modern world that he is about to react to. It appears on screen as a text card for three seconds before he speaks.
