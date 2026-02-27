@@ -6,7 +6,7 @@
 const LEONARDO_API_URL = "https://cloud.leonardo.ai/api/rest/v1";
 
 // Leonardo Kino XL model - best for consistent character generation
-const LEONARDO_MODEL_ID = "aa77f04e-3eec-4034-9c07-d0f619684628";
+const LEONARDO_MODEL_ID = "7b592283-e8a7-4c5a-9ba6-d18c31f258b9";
 
 // Mr. Oldverdict base character prompt
 // This is locked and never changes. Scene direction is appended.
