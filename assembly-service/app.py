@@ -63,6 +63,12 @@ def get_script(script_id):
     return data[0]
 
 
+def strip_emotion_tags(text):
+    """Remove emotion tags like [clears throat] [laughing] from caption text."""
+    import re
+    return re.sub(r'\[.*?\]', '', text).strip()
+
+
 def build_caption_clips(lines, video_duration, video_width, video_height):
     caption_clips = []
     num_lines = len(lines)
@@ -76,7 +82,7 @@ def build_caption_clips(lines, video_duration, video_width, video_height):
     current_time = 0
 
     for i, line in enumerate(lines):
-        text = line.get('text', '')
+        text = strip_emotion_tags(line.get('text', ''))
         pause_after = line.get('pause_after', False)
 
         # Duration for this line
@@ -138,7 +144,7 @@ def build_setup_card(setup_text, video_width, video_height, duration=3.0):
 
         # Small label above
         label = (TextClip(
-            "Meanwhile, in 2025...",
+            "Been watching since before.",
             fontsize=28,
             color='#888888',
             font='DejaVu-Sans',
@@ -303,6 +309,8 @@ def assemble():
         # Get script lines for captions and setup text
         lines = script.get('lines', [])
         setup_text = script.get('setup', None)
+        print(f"Setup text: {setup_text}")
+        print(f"Lines: {lines}")
 
         # Assemble video
         assemble_video(image_path, audio_path, lines, output_path, setup_text)
