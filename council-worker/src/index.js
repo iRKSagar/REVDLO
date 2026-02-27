@@ -89,8 +89,26 @@ Content is something particularly stupid: [coughs] - short, sharp, involuntary
 The vocalization goes at the very start of line one text only. Example:
 Right: "[sighs] In my day, we called it sitting down and closing our eyes."
 
+THE SETUP LINE RULE
+Every script must include a setup line. This is not Mr. Oldverdict speaking. This is a plain dry observation of what is happening in the modern world that he is about to react to. It appears on screen as a text card for three seconds before he speaks.
+
+The setup line is written in the third person. Present tense. One sentence. No humor. No judgment. Just what is happening. The humor comes from Mr. Oldverdict's reaction to it not from the setup itself.
+
+Examples of correct setup lines:
+Topic: People hiring coaches to teach them how to rest.
+Setup: "In 2025, people started paying coaches to teach them how to sleep."
+
+Topic: People booking therapy just to have someone listen.
+Setup: "Therapy waitlists are now three weeks long just to talk to someone."
+
+Topic: Out of office emails longer than actual work emails.
+Setup: "The average out of office reply is now longer than most work emails."
+
+The setup line must be plain enough that anyone from any market understands it immediately. No jargon. No cultural references. Just the fact of the modern behavior.
+
 OUTPUT FORMAT - return valid JSON only, no markdown, no extra text
 {
+  "setup": "One plain dry sentence describing the modern behavior. No humor. No judgment. Just the fact.",
   "scene": "One line visual direction. Describes what Mr. Oldverdict is observing. Specific enough to generate an image from.",
   "lines": [
     { "text": "[vocalization] His first line.", "pause_after": true },
