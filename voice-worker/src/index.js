@@ -129,20 +129,22 @@ async function updateVideoRecord(supabaseUrl, supabaseKey, scriptId, audioUrl) {
 
 function buildFullScript(lines) {
   // Combine all lines into one clean text for ElevenLabs
-  // Use SSML-style break markers for natural pauses
-  // ElevenLabs supports <break time="Xs"/> for silence
+  // Use punctuation to create natural pauses between lines
+  // Period + ellipsis creates the longest natural pause in TTS
   return lines
     .map((line, index) => {
       let text = line.text;
-      // Add a long pause after lines marked pause_after
-      if (line.pause_after && index < lines.length - 1) {
-        text += ' <break time="1.5s"/> ';
-      } else if (index < lines.length - 1) {
-        text += ' <break time="0.8s"/> ';
+      if (index < lines.length - 1) {
+        if (line.pause_after) {
+          // Long pause after this line
+          text += '...';
+        } else {
+          text += '.';
+        }
       }
       return text;
     })
-    .join('')
+    .join('  ')
     .trim();
 }
 
