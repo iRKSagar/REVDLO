@@ -121,8 +121,8 @@ def assemble_video(image_path, audio_path, lines, output_path):
     duration = audio.duration
 
     # Target: 9:16 vertical format for Shorts and Reels
-    target_width = 1080
-    target_height = 1920
+    target_width = 540
+    target_height = 960
 
     # Load and resize image to fill 9:16
     image_clip = ImageClip(image_path).set_duration(duration)
@@ -167,8 +167,8 @@ def assemble_video(image_path, audio_path, lines, output_path):
         audio_codec='aac',
         temp_audiofile=output_path + '_temp_audio.m4a',
         remove_temp=True,
-        preset='fast',
-        ffmpeg_params=['-crf', '23']
+        preset='ultrafast',
+        ffmpeg_params=['-crf', '28']
     )
 
     audio.close()
