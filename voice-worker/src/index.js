@@ -30,7 +30,7 @@ async function generateAudio(elevenLabsKey, voiceId, text) {
   // Style low to avoid over-expression
   // Speaking rate slightly slow for the unhurried pace
   const response = await fetch(`${ELEVENLABS_API_URL}/text-to-speech/${voiceId}`, {
-    method: 'PUT',
+    method: 'POST',
     headers: {
       'xi-api-key': elevenLabsKey,
       'Content-Type': 'application/json',
