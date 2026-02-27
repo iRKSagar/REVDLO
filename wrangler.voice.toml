@@ -1,0 +1,16 @@
+name = "mr-oldverdict-voice"
+main = "voice-worker/src/index.js"
+compatibility_date = "2024-01-01"
+
+[triggers]
+crons = ["0 7 * * *", "0 18 * * *"]
+
+[vars]
+WORKER_DOMAIN = "voice.rkinfoarch.workers.dev"
+
+# Secrets needed - add in Cloudflare dashboard:
+# SUPABASE_URL
+# SUPABASE_KEY
+# COUNCIL_SECRET
+# ELEVENLABS_API_KEY
+# ELEVENLABS_VOICE_ID
