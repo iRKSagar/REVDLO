@@ -30,7 +30,7 @@ async function generateAudio(elevenLabsKey, voiceId, text) {
   // Style low to avoid over-expression
   // Speaking rate slightly slow for the unhurried pace
   const response = await fetch(`${ELEVENLABS_API_URL}/text-to-speech/${voiceId}`, {
-    method: 'POST',
+    method: 'PUT',
     headers: {
       'xi-api-key': elevenLabsKey,
       'Content-Type': 'application/json',
@@ -53,7 +53,9 @@ async function generateAudio(elevenLabsKey, voiceId, text) {
     throw new Error(`ElevenLabs API error: ${error}`);
   }
 
-  return await response.arrayBuffer();
+  // Convert to Uint8Array for reliable transfer in Cloudflare Workers
+  const buffer = await response.arrayBuffer();
+  return new Uint8Array(buffer);
 }
 
 async function uploadAudioToSupabase(supabaseUrl, supabaseKey, scriptId, audioBuffer) {
@@ -62,7 +64,7 @@ async function uploadAudioToSupabase(supabaseUrl, supabaseKey, scriptId, audioBu
   const response = await fetch(
     `${supabaseUrl}/storage/v1/object/revdlo-media/${fileName}`,
     {
-      method: 'POST',
+      method: 'PUT',
       headers: {
         'apikey': supabaseKey,
         'Authorization': `Bearer ${supabaseKey}`,
@@ -110,7 +112,7 @@ async function updateVideoRecord(supabaseUrl, supabaseKey, scriptId, audioUrl) {
   } else {
     // Create new video record
     await fetch(`${supabaseUrl}/rest/v1/videos`, {
-      method: 'POST',
+      method: 'PUT',
       headers: {
         'apikey': supabaseKey,
         'Authorization': `Bearer ${supabaseKey}`,
@@ -209,7 +211,7 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(
       fetch(`https://${env.WORKER_DOMAIN}/`, {
-        method: 'POST',
+        method: 'PUT',
         headers: {
           'Authorization': `Bearer ${env.COUNCIL_SECRET}`,
           'Content-Type': 'application/json'
