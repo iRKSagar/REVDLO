@@ -322,7 +322,7 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
         if logo_path and os.path.exists(logo_path):
             try:
                 logo_img = (ImageClip(logo_path)
-                    .resize(height=100)
+                    .resize(height=70)
                     .set_position((20, 20))
                     .set_duration(duration))
                 logo_clips = [logo_img]
