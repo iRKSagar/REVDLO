@@ -224,6 +224,7 @@ async function storeScript(supabaseUrl, supabaseKey, topicId, category, rawTopic
       category,
       raw_topic: rawTopic,
       scene: script.scene,
+      setup: script.setup,
       lines: script.lines,
       prop: script.prop,
       expression: script.expression,
@@ -344,6 +345,11 @@ export default {
 
       // Generate script through the Council
       const script = await generateScript(env.OPENAI_API_KEY, rawTopic, category, relatedScripts);
+
+      // Ensure setup is always populated
+      if (!script.setup) {
+        script.setup = `In 2025, ${rawTopic.toLowerCase()}.`;
+      }
 
       // Store script and connections in Supabase
       const stored = await storeScript(
