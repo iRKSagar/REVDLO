@@ -328,7 +328,7 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
         return None
 
 
-def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, outro_sound_path=None, typewriter_sound_path=None):
+def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, outro_sound_path=None, typewriter_sound_path=None, outro_bg_path=None):
     # Load audio to get duration
     audio = AudioFileClip(audio_path)
     duration = audio.duration
@@ -413,7 +413,7 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
     clips.append(fade_gap)
 
     outro_audio_path = outro_sound_path
-    outro_card = build_outro_card(target_width, target_height, outro_audio_path=outro_audio_path, duration=3.5, image_path=image_path)
+    outro_card = build_outro_card(target_width, target_height, outro_audio_path=outro_audio_path, duration=3.5, image_path=outro_bg_path)
     if outro_card:
         outro_card = outro_card.fadein(0.5)
         clips.append(outro_card)
@@ -504,6 +504,7 @@ def assemble():
         # Fetch outro and typewriter sound URLs
         outro_sound_url = get_outro_sound_url(SUPABASE_URL, SUPABASE_KEY)
         typewriter_sound_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'typewriter_sound_url')
+        outro_bg_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'outro_bg_url')
 
         image_url = video_record.get('image_url')
         audio_url = video_record.get('voice_file_url')
@@ -532,6 +533,13 @@ def assemble():
             except Exception as e:
                 print(f'Typewriter sound download failed: {e}')
 
+        outro_bg_path = None
+        if outro_bg_url:
+            try:
+                outro_bg_path = download_file(outro_bg_url, '.jpg')
+            except Exception as e:
+                print(f'Outro bg download failed: {e}')
+
         # Output path
         output_path = tempfile.mktemp(suffix='.mp4')
 
@@ -545,7 +553,7 @@ def assemble():
         print(f"Lines: {lines}")
 
         # Assemble video
-        assemble_video(image_path, audio_path, lines, output_path, setup_text, outro_sound_path, typewriter_sound_path)
+        assemble_video(image_path, audio_path, lines, output_path, setup_text, outro_sound_path, typewriter_sound_path, outro_bg_path)
 
         # Upload to Supabase
         video_url = upload_video(script_id, output_path)
@@ -567,7 +575,7 @@ def assemble():
 
     finally:
         # Clean up temp files
-        for path in [image_path, audio_path, output_path, outro_sound_path, typewriter_sound_path]:
+        for path in [image_path, audio_path, output_path, outro_sound_path, typewriter_sound_path, outro_bg_path]:
             if path and os.path.exists(path):
                 try:
                     os.unlink(path)
