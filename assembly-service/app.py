@@ -158,7 +158,7 @@ def get_setting(supabase_url, supabase_key, key):
     return None
 
 
-def build_outro_card(video_width, video_height, outro_audio_path=None, duration=3.0, image_path=None):
+def build_outro_card(video_width, video_height, outro_audio_path=None, duration=3.0, image_path=None, logo_path=None):
     """Build the outro card with Mr. Oldverdict branding and character background."""
     try:
         from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, AudioFileClip, ImageClip
@@ -219,7 +219,18 @@ def build_outro_card(video_width, video_height, outro_audio_path=None, duration=
         .set_position(('center', video_height * 0.70))
         .set_duration(duration))
 
-        outro = CompositeVideoClip([bg, name_clip, tagline_clip, follow_clip, follow2_clip], size=(video_width, video_height))
+        # Logo top left on outro
+        outro_layers = [bg, name_clip, tagline_clip, follow_clip, follow2_clip]
+        if logo_path and os.path.exists(logo_path):
+            try:
+                outro_logo = (ImageClip(logo_path)
+                    .resize(height=70)
+                    .set_position((24, 24))
+                    .set_duration(duration))
+                outro_layers.append(outro_logo)
+            except Exception as e:
+                print(f'Logo on outro failed: {e}')
+        outro = CompositeVideoClip(outro_layers, size=(video_width, video_height))
 
         # Add outro sound if available
         if outro_audio_path and os.path.exists(outro_audio_path):
@@ -235,7 +246,7 @@ def build_outro_card(video_width, video_height, outro_audio_path=None, duration=
         return None
 
 
-def build_setup_card(setup_text, video_width, video_height, image_path=None, duration=5.0, typewriter_sound_path=None):
+def build_setup_card(setup_text, video_width, video_height, image_path=None, duration=5.0, typewriter_sound_path=None, logo_path=None):
     """Build a typewriter-effect setup card with optional background image."""
     try:
         from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, ImageClip, concatenate_videoclips
@@ -259,15 +270,7 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
 
         frames_clips = []
 
-        # Label clip - stays throughout
-        label = TextClip(
-            "Been watching since before.",
-            fontsize=26,
-            color='#888888',
-            font='DejaVu-Serif',
-            method='label',
-            align='center'
-        ).set_position(('center', int(video_height * 0.32)))
+        # No label - logo replaces it
 
         # Build typewriter frames - one clip per character reveal
         # Group into chunks to keep clip count manageable
@@ -313,9 +316,20 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
         .set_duration(duration - last_end))
 
         bg_clip = bg_base.set_duration(duration)
-        label_clip = label.set_duration(duration)
 
-        all_clips = [bg_clip, label_clip] + frames_clips + [final_txt]
+        # Logo in top left corner
+        logo_clips = []
+        if logo_path and os.path.exists(logo_path):
+            try:
+                logo_img = (ImageClip(logo_path)
+                    .resize(height=80)
+                    .set_position((24, 24))
+                    .set_duration(duration))
+                logo_clips = [logo_img]
+            except Exception as e:
+                print(f'Logo on setup card failed: {e}')
+
+        all_clips = [bg_clip] + logo_clips + frames_clips + [final_txt]
         card = CompositeVideoClip(all_clips, size=(video_width, video_height)).set_duration(duration)
 
         # Add typewriter sound synced to typing - starts at 0.5s when text begins appearing
@@ -341,7 +355,7 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
         return None
 
 
-def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, outro_sound_path=None, typewriter_sound_path=None, outro_bg_path=None):
+def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, outro_sound_path=None, typewriter_sound_path=None, outro_bg_path=None, logo_path=None):
     # Load audio to get duration
     audio = AudioFileClip(audio_path)
     duration = audio.duration
@@ -439,7 +453,7 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
     clips = []
 
     if setup_text:
-        setup_card = build_setup_card(setup_text, target_width, target_height, image_path=image_path, duration=5.0, typewriter_sound_path=typewriter_sound_path)
+        setup_card = build_setup_card(setup_text, target_width, target_height, image_path=image_path, duration=5.0, typewriter_sound_path=typewriter_sound_path, logo_path=logo_path)
         if setup_card:
             clips.append(setup_card)
             # Brief black gap before Mr. Oldverdict appears
@@ -453,7 +467,7 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
     clips.append(fade_gap)
 
     outro_audio_path = outro_sound_path
-    outro_card = build_outro_card(target_width, target_height, outro_audio_path=outro_audio_path, duration=3.5, image_path=outro_bg_path)
+    outro_card = build_outro_card(target_width, target_height, outro_audio_path=outro_audio_path, duration=3.5, image_path=outro_bg_path, logo_path=logo_path)
     if outro_card:
         outro_card = outro_card.fadein(0.5)
         clips.append(outro_card)
@@ -545,6 +559,7 @@ def assemble():
         outro_sound_url = get_outro_sound_url(SUPABASE_URL, SUPABASE_KEY)
         typewriter_sound_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'typewriter_sound_url')
         outro_bg_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'outro_bg_url')
+        logo_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'logo_url')
 
         image_url = video_record.get('image_url')
         audio_url = video_record.get('voice_file_url')
@@ -583,6 +598,14 @@ def assemble():
         else:
             print('Outro bg URL not found in settings')
 
+        logo_path = None
+        if logo_url:
+            try:
+                logo_path = download_file(logo_url, '.png')
+                print(f'Logo downloaded: {logo_path}')
+            except Exception as e:
+                print(f'Logo download failed: {e}')
+
         # Output path
         output_path = tempfile.mktemp(suffix='.mp4')
 
@@ -596,7 +619,7 @@ def assemble():
         print(f"Lines: {lines}")
 
         # Assemble video
-        assemble_video(image_path, audio_path, lines, output_path, setup_text, outro_sound_path, typewriter_sound_path, outro_bg_path)
+        assemble_video(image_path, audio_path, lines, output_path, setup_text, outro_sound_path, typewriter_sound_path, outro_bg_path, logo_path)
 
         # Upload to Supabase
         video_url = upload_video(script_id, output_path)
@@ -618,7 +641,7 @@ def assemble():
 
     finally:
         # Clean up temp files
-        for path in [image_path, audio_path, output_path, outro_sound_path, typewriter_sound_path, outro_bg_path]:
+        for path in [image_path, audio_path, output_path, outro_sound_path, typewriter_sound_path, outro_bg_path, logo_path]:
             if path and os.path.exists(path):
                 try:
                     os.unlink(path)
