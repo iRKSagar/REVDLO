@@ -322,8 +322,8 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
         if logo_path and os.path.exists(logo_path):
             try:
                 logo_img = (ImageClip(logo_path)
-                    .resize(height=80)
-                    .set_position((24, 24))
+                    .resize(height=100)
+                    .set_position((20, 20))
                     .set_duration(duration))
                 logo_clips = [logo_img]
             except Exception as e:
@@ -446,7 +446,8 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
         main_layers = [image_clip, dark_band] + caption_clips
 
     main_clip = CompositeVideoClip(main_layers, size=(target_width, target_height))
-    main_clip = main_clip.set_audio(extended_audio).set_duration(total_image_duration).fadeout(0.6)
+    # Fade in from dark - brightness reveal as voice starts
+    main_clip = main_clip.fadein(0.8).set_audio(extended_audio).set_duration(total_image_duration).fadeout(0.6)
 
     # Add setup card at the start and outro card at the end
     from moviepy.editor import concatenate_videoclips, ColorClip as _ColorClip
@@ -455,10 +456,9 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
     if setup_text:
         setup_card = build_setup_card(setup_text, target_width, target_height, image_path=image_path, duration=5.0, typewriter_sound_path=typewriter_sound_path, logo_path=logo_path)
         if setup_card:
+            # Fade out setup card so main video fades in bright
+            setup_card = setup_card.fadeout(0.8)
             clips.append(setup_card)
-            # Brief black gap before Mr. Oldverdict appears
-            brief_gap = _ColorClip(size=(target_width, target_height), color=(0,0,0)).set_duration(0.5)
-            clips.append(brief_gap)
 
     clips.append(main_clip)
 
