@@ -50,7 +50,7 @@ def get_video_record(script_id):
 
 def get_script(script_id):
     response = requests.get(
-        f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id}&limit=1&select=*',
+        f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id}&limit=1&select=id,setup,lines,scene,prop,expression',
         headers={
             'apikey': SUPABASE_KEY,
             'Authorization': f'Bearer {SUPABASE_KEY}'
@@ -60,7 +60,9 @@ def get_script(script_id):
     data = response.json()
     if not data:
         raise Exception('Script not found')
-    return data[0]
+    row = data[0]
+    print(f"Raw script row: {row}")
+    return row
 
 
 def strip_emotion_tags(text):
@@ -198,40 +200,89 @@ def build_outro_card(video_width, video_height, outro_audio_path=None, duration=
         return None
 
 
-def build_setup_card(setup_text, video_width, video_height, duration=3.0):
-    """Build a text card clip for the setup line."""
+def build_setup_card(setup_text, video_width, video_height, image_path=None, duration=5.0):
+    """Build a typewriter-effect setup card with optional background image."""
     try:
-        from moviepy.editor import ColorClip, TextClip, CompositeVideoClip
+        from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, ImageClip, concatenate_videoclips
+        import numpy as np
 
-        # Dark background card
-        bg = ColorClip(size=(video_width, video_height), color=(15, 15, 15)).set_duration(duration)
+        # Build background - darkened image if available, else dark color
+        if image_path and os.path.exists(image_path):
+            bg_img = ImageClip(image_path).resize((video_width, video_height))
+            # Darken the image heavily so text reads clearly
+            dark_overlay = ColorClip(size=(video_width, video_height), color=(0, 0, 0)).set_opacity(0.82)
+            bg_base = CompositeVideoClip([bg_img, dark_overlay], size=(video_width, video_height))
+        else:
+            bg_base = ColorClip(size=(video_width, video_height), color=(15, 15, 15))
 
-        # Setup text
-        txt = (TextClip(
+        # Typewriter effect - reveal text character by character
+        # Split duration: first 0.5s empty, then type out, last 1s full text
+        chars = list(setup_text)
+        total_chars = len(chars)
+        type_duration = duration - 1.5  # time to type out all chars
+        char_interval = type_duration / max(total_chars, 1)
+
+        frames_clips = []
+
+        # Label clip - stays throughout
+        label = TextClip(
+            "Been watching since before.",
+            fontsize=26,
+            color='#888888',
+            font='DejaVu-Sans',
+            method='label',
+            align='center'
+        ).set_position(('center', int(video_height * 0.32)))
+
+        # Build typewriter frames - one clip per character reveal
+        # Group into chunks to keep clip count manageable
+        chunk_size = max(1, total_chars // 20)
+        shown_chars = 0
+        last_end = 0.5  # start typing after 0.5s
+
+        for i in range(0, total_chars, chunk_size):
+            shown_chars = min(i + chunk_size, total_chars)
+            partial_text = setup_text[:shown_chars]
+            clip_start = 0.5 + (i * char_interval)
+            clip_end = 0.5 + (min(i + chunk_size, total_chars) * char_interval)
+            clip_duration = max(clip_end - clip_start, 0.1)
+
+            txt_clip = (TextClip(
+                partial_text,
+                fontsize=42,
+                color='white',
+                font='DejaVu-Sans',
+                method='caption',
+                size=(video_width - 120, None),
+                align='center'
+            )
+            .set_position(('center', int(video_height * 0.44)))
+            .set_start(clip_start)
+            .set_duration(clip_duration))
+
+            frames_clips.append(txt_clip)
+            last_end = clip_end
+
+        # Final full text for remaining duration
+        final_txt = (TextClip(
             setup_text,
-            fontsize=46,
+            fontsize=42,
             color='white',
             font='DejaVu-Sans',
             method='caption',
             size=(video_width - 120, None),
             align='center'
         )
-        .set_position('center')
-        .set_duration(duration))
+        .set_position(('center', int(video_height * 0.44)))
+        .set_start(last_end)
+        .set_duration(duration - last_end))
 
-        # Small label above
-        label = (TextClip(
-            "Been watching since before.",
-            fontsize=28,
-            color='#888888',
-            font='DejaVu-Sans',
-            method='label',
-            align='center'
-        )
-        .set_position(('center', video_height * 0.35))
-        .set_duration(duration))
+        bg_clip = bg_base.set_duration(duration)
+        label_clip = label.set_duration(duration)
 
-        return CompositeVideoClip([bg, label, txt], size=(video_width, video_height))
+        all_clips = [bg_clip, label_clip] + frames_clips + [final_txt]
+        return CompositeVideoClip(all_clips, size=(video_width, video_height)).set_duration(duration)
+
     except Exception as e:
         print(f'Setup card failed: {e}')
         return None
@@ -302,11 +353,16 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
     clips = []
 
     if setup_text:
-        setup_card = build_setup_card(setup_text, target_width, target_height, duration=3.0)
+        setup_card = build_setup_card(setup_text, target_width, target_height, image_path=image_path, duration=5.0)
         if setup_card:
             clips.append(setup_card)
 
     clips.append(main_clip)
+
+    # Add 1.5 second black pause between voice and outro
+    from moviepy.editor import ColorClip as _ColorClip
+    gap = _ColorClip(size=(target_width, target_height), color=(0,0,0)).set_duration(1.5)
+    clips.append(gap)
 
     outro_audio_path = outro_sound_path
     outro_card = build_outro_card(target_width, target_height, outro_audio_path=outro_audio_path, duration=3.0)
