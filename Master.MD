@@ -103,7 +103,7 @@ Category E with a proverb/saying twist. Council generates from the meta-topic: "
 
 ## 4. VIDEO STRUCTURE
 
-Total duration: ~22 seconds at 2 videos per day.
+Total duration: ~22 seconds at 2 videos per day. Observed range: 20–23 seconds across 10 assembled videos. Acceptable variance.
 
 ### Section 1: Setup Card (6 seconds)
 - Background: Darkened character image (82% black overlay)
@@ -242,6 +242,9 @@ All workers: `Authorization: Bearer mroldverdict_xK9mP1978`
 
 ### Known Issue: Character Consistency
 Leonardo generates a different face each time. Reference image locking was attempted using `imagePrompts` and `controlnets` APIs but both failed with field validation errors. The correct approach is likely `init_image_id` which requires uploading the reference image to Leonardo first to get an internal ID, then using it with low strength. This is pending investigation.
+
+### Observed Accuracy
+80% character accuracy across 10 assembled videos. Acceptable for launch. Full resolution pending `init_image_id` fix.
 
 ---
 
@@ -412,22 +415,30 @@ All 10 videos assembled and stored in Supabase storage.
 
 ## 21. REPO FILE STRUCTURE
 
+Confirmed from GitHub screenshot (February 2026). All folder names use hyphens. Each worker has a `src/` subfolder containing `index.js`. Wrangler toml files are at repo root (not visible in screenshot but consistent with deployment setup).
+
 ```
 REVDLO/
 ├── assembly-service/
 │   ├── app.py                    # Flask video assembly. Main file. All video logic here.
 │   └── requirements.txt          # Python dependencies
-├── council-worker/
-│   └── src/index.js              # Script generation. Full character prompt here.
-├── voice-worker/
-│   └── src/index.js              # ElevenLabs voice generation
-├── image-worker/
-│   └── src/index.js              # Leonardo AI image generation
-├── ingestion-worker/
-│   └── src/index.js              # Reddit topic ingestion
 ├── assets/
 │   ├── logo123.png               # Mr. Oldverdict face logo (placeholder)
 │   └── ourtro-bg.jpg             # Rustic parchment outro background (note typo in name)
+├── council-worker/
+│   └── src/
+│       └── index.js              # Script generation. Full character prompt here.
+├── image-worker/
+│   └── src/
+│       └── index.js              # Leonardo AI image generation
+├── ingestion-worker/
+│   └── src/
+│       └── index.js              # Reddit topic ingestion
+├── voice-worker/
+│   └── src/
+│       └── index.js              # ElevenLabs voice generation
+├── supabase/
+│   └── schema.sql                # Full database schema
 ├── outro1.mp3                    # Outro signature music
 ├── typewriter.mp3                # Typewriter sound for setup card
 ├── render.yaml                   # Render deployment config
@@ -435,10 +446,10 @@ REVDLO/
 ├── wrangler.voice.toml           # Voice worker config
 ├── wrangler.image.toml           # Image worker config
 ├── wrangler.ingestion.toml       # Ingestion worker config
-├── supabase/
-│   └── schema.sql                # Full database schema
 └── MASTER.md                     # This file
 ```
+
+**Note:** Orchestration worker folder (`orchestration-worker/src/index.js`) to be added when built.
 
 ---
 
