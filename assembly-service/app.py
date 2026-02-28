@@ -203,10 +203,34 @@ def build_outro_card(video_width, video_height, outro_audio_path=None, duration=
             method='label',
             align='center'
         )
-        .set_position(('center', video_height * 0.58))
+        .set_position(('center', video_height * 0.56))
         .set_duration(duration))
 
-        outro = CompositeVideoClip([bg, name_clip, tagline_clip, handle_clip], size=(video_width, video_height))
+        # Daily dose line
+        follow_clip = (TextClip(
+            "Your daily dose of old wisdom.",
+            fontsize=26,
+            color='#aaaaaa',
+            font='DejaVu-Serif',
+            method='label',
+            align='center'
+        )
+        .set_position(('center', video_height * 0.63))
+        .set_duration(duration))
+
+        # Follow line
+        follow2_clip = (TextClip(
+            "Follow @mroldverdict",
+            fontsize=24,
+            color='#888888',
+            font='DejaVu-Serif',
+            method='label',
+            align='center'
+        )
+        .set_position(('center', video_height * 0.70))
+        .set_duration(duration))
+
+        outro = CompositeVideoClip([bg, name_clip, tagline_clip, handle_clip, follow_clip, follow2_clip], size=(video_width, video_height))
 
         # Add outro sound if available
         if outro_audio_path and os.path.exists(outro_audio_path):
@@ -305,26 +329,19 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
         all_clips = [bg_clip, label_clip] + frames_clips + [final_txt]
         card = CompositeVideoClip(all_clips, size=(video_width, video_height)).set_duration(duration)
 
-        # Add typewriter sound synced to typing start and end
+        # Add typewriter sound synced to typing - starts at 0.5s when text begins appearing
         if typewriter_sound_path and os.path.exists(typewriter_sound_path):
             try:
                 from moviepy.editor import AudioFileClip as _AFC
                 from moviepy.audio.AudioClip import concatenate_audioclips
-                from moviepy.audio.AudioClip import AudioClip
-                import numpy as np
-                tw_audio = _AFC(typewriter_sound_path)
-                # Typing starts at 0.5s and ends at last_end
+                tw_single = _AFC(typewriter_sound_path)
                 type_dur = last_end - 0.5
-                # Loop to fill exact typing duration
-                loops_needed = int(type_dur / tw_audio.duration) + 2
-                looped = concatenate_audioclips([tw_audio] * loops_needed)
+                loops_needed = int(type_dur / tw_single.duration) + 2
+                looped = concatenate_audioclips([tw_single] * loops_needed)
                 tw_trimmed = looped.subclip(0, type_dur).audio_fadeout(0.4)
-                # Add silence before typing starts so audio aligns with text
-                silence_frames = int(0.5 * tw_trimmed.fps) if hasattr(tw_trimmed, 'fps') else 22050 // 2
-                silence = AudioClip(lambda t: np.zeros((2,) if tw_trimmed.nchannels == 2 else (1,)), duration=0.5, fps=44100)
-                from moviepy.audio.AudioClip import concatenate_audioclips as _cat
-                synced_audio = _cat([silence, tw_trimmed])
-                card = card.set_audio(synced_audio)
+                # Offset audio to start at 0.5s to match when text starts appearing
+                tw_trimmed = tw_trimmed.set_start(0.5)
+                card = card.set_audio(tw_trimmed)
             except Exception as e:
                 print(f'Typewriter audio failed: {e}')
 
