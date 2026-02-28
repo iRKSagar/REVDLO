@@ -1,6 +1,6 @@
 # MR. OLDVERDICT - MASTER DOCUMENT
 ## Complete knowledge transfer. Every detail. Nothing left out.
-## Last updated: Session ending February 2026
+## Last updated: Session March 1 2026 — Publish worker (YouTube) complete
 
 ---
 
@@ -153,12 +153,14 @@ Total duration: ~22 seconds at 2 videos per day. Observed range: 20–23 seconds
 ### Cloudflare Workers
 | Worker | URL | Purpose | Crons |
 |--------|-----|---------|-------|
-| Council | https://revdlo1.rkinfoarch.workers.dev/ | Script generation | 2 (11 AM, 8 PM UTC) |
+| Council | https://revdlo1.rkinfoarch.workers.dev/ | Script generation | None (called by orchestration) |
 | Ingestion | https://ingestion.rkinfoarch.workers.dev/ | Reddit topic ingestion | 1 (6 AM UTC) |
 | Voice | https://voice.rkinfoarch.workers.dev/ | ElevenLabs audio | None (POST only) |
 | Image | https://image.rkinfoarch.workers.dev/ | Leonardo AI image | None (POST only) |
+| Orchestration | https://orchestration.rkinfoarch.workers.dev/ | Full pipeline trigger | 2 (8 PM UTC today, 11 AM UTC tomorrow) |
 
-Note: Cloudflare free tier allows 5 cron triggers maximum. Currently using 3. 2 reserved for orchestration worker.
+Note: Cloudflare free tier allows 5 cron triggers maximum. All 5 now used (ingestion + 2 orchestration + 2 council removed).
+Orchestration Git build deploy command: `npx wrangler deploy --config wrangler.orchestration.toml`
 
 ### Assembly Service (Render)
 - URL: https://revdlo.onrender.com
@@ -375,6 +377,9 @@ All 10 videos assembled and stored in Supabase storage.
 - [x] 10 video content buffer assembled and ready.
 - [x] Supabase storage cleaned of test data.
 - [x] Reference image locked.
+- [x] Orchestration worker. Full pipeline automation. Cron fires at 8 PM and 11 AM UTC. Council auto-selects topic. Voice + image parallel. Assembly on Render background thread. Tested and confirmed working February 28 2026.
+- [x] YouTube publish worker. /publish route on Render. OAuth2 refresh token flow. Resumable upload to YouTube Data API v3. Auto-publishes after assembly in pipeline. Manual trigger also available.
+- [x] YouTube channel created. @mroldverdict. mroldverdict@gmail.com Google account.
 
 ---
 
@@ -387,11 +392,10 @@ All 10 videos assembled and stored in Supabase storage.
 - [ ] **Cloudflare GitHub PR bot**: Disable in Cloudflare Settings > Git integration for each worker.
 
 ### Short Term (next session)
-- [ ] **Orchestration worker**: One Cloudflare worker that runs the full pipeline in sequence. Calls council, then voice, then image, then assembly. Uses the 2 remaining cron slots. This is the last step before full automation.
-- [ ] **Publish worker**: YouTube Data API + Instagram Graph API. OAuth tokens, upload formats, metadata. Estimated 4-6 hours. This is the most complex remaining piece.
-- [ ] **YouTube channel**: Create @mroldverdict channel. Profile picture, banner, bio.
-- [ ] **Instagram account**: Create @mroldverdict. Profile picture, bio.
+- [ ] **Instagram publish**: Instagram Graph API. Requires Facebook Business account linked to Instagram. Two step process: create container, then publish. Caption: second line + hashtags.
+- [ ] **Instagram account**: Create @mroldverdict. Switch to Creator. Link Facebook page.
 - [ ] **Topics queue**: Load 60+ topics into Supabase topics table for ingestion worker to use.
+- [ ] **YouTube channel art**: Profile picture, banner using reference image.
 
 ### Future
 - [ ] Second concept (discussed, details locked for next week after full automation)
@@ -445,49 +449,61 @@ REVDLO/
 ├── wrangler.toml                 # Council worker Cloudflare config
 ├── wrangler.voice.toml           # Voice worker config
 ├── wrangler.image.toml           # Image worker config
-├── wrangler.ingestion.toml       # Ingestion worker config
+├── orchestration-worker/
+│   └── src/
+│       └── index.js              # Full pipeline trigger. Wakes Render, fires /run-pipeline.
+├── wrangler.orchestration.toml   # Orchestration worker config. Deploy cmd: npx wrangler deploy --config wrangler.orchestration.toml
 └── MASTER.md                     # This file
 ```
 
-**Note:** Orchestration worker folder (`orchestration-worker/src/index.js`) to be added when built.
+Push `orchestration-worker/` folder and `wrangler.orchestration.toml` to repo root if not already there.
 
 ---
 
-## 22. ORCHESTRATION WORKER (TO BUILD NEXT)
+## 22. ORCHESTRATION WORKER (DONE)
 
-This is the final automation piece. When built it will replace all manual pipeline steps.
+Built and confirmed working February 28 2026. Full end-to-end pipeline runs unattended.
 
-**Logic:**
-1. Cron fires at 7:30 AM and 6:30 PM UTC
-2. Call ingestion worker to top up topic queue
-3. Call council worker to generate script from top topic
-4. Call voice worker with script_id
-5. Call image worker with script_id (simultaneously with voice)
-6. Wait for both to complete (poll videos table until voice_file_url and image_url both populated)
-7. Call assembly service with script_id
-8. Call publish worker with script_id (once built)
-9. Mark script as published
+**How it works:**
+1. Cloudflare cron fires at 8 PM and 11 AM UTC
+2. Worker GETs Render to wake it (free tier sleeps after 15 min)
+3. Worker POSTs `/run-pipeline` to Render — gets 202 immediately
+4. Render background thread runs the full pipeline:
+   - Council called with empty body → auto-selects highest scored unused topic from Supabase
+   - Voice + Image called simultaneously via ThreadPoolExecutor
+   - Polls videos table every 10s until both voice_file_url and image_url populated (max 5 min wait)
+   - Assembly runs, video uploaded to Supabase storage, video record updated
+5. Worker is done. Render does all the work.
 
-**Cron slots available:** 2 remaining on free tier. Use both for orchestration (morning and evening runs).
+**Files:**
+- `orchestration-worker/src/index.js` — Cloudflare worker
+- `wrangler.orchestration.toml` — config. name = orchestration
+- `assembly-service/app.py` — contains `/run-pipeline` route and `run_pipeline_job()` function
+
+**Known quirk:** Render free tier may sleep between the wake GET and the pipeline POST if startup takes longer than usual. If a scheduled run produces no video, manually fire the orchestration worker once to retry.
 
 ---
 
-## 23. PUBLISH WORKER (TO BUILD AFTER ORCHESTRATION)
+## 23. PUBLISH WORKER (YOUTUBE DONE — INSTAGRAM PENDING)
 
-**YouTube Shorts:**
-- API: YouTube Data API v3
-- OAuth2 flow required once. Store refresh token in Cloudflare secrets.
-- Upload: videos.insert with snippet.title, snippet.description, status.privacyStatus
-- Title: setup card text
-- Description: both lines + hashtags
+**YouTube Shorts — DONE:**
+- Route: POST /publish on Render assembly service
+- Called automatically at end of run_pipeline_job
+- Manual trigger: POST /publish with optional script_id in body
+- OAuth2: refresh token stored in Render environment variables
+- Title: setup card text (max 100 chars)
+- Description: both lines stripped of emotion tags + hashtags
 - Tags: mroldverdict, shorts, comedy, wisdom, observations
+- Marks script published=true in Supabase after upload
+- Google Cloud project: revdlo. OAuth client: revdlo.
+- Credentials stored in Render env: YT_CLIENT_ID, YT_CLIENT_SECRET, YT_REFRESH_TOKEN
 
-**Instagram Reels:**
+**Instagram Reels — PENDING:**
 - API: Instagram Graph API
 - Requires Facebook Business account linked to Instagram
 - Two step process: create container, then publish
 - Caption: second line + hashtags
-- More complex than YouTube. Build YouTube first.
+- Build after Instagram account is created and linked to Facebook
 
 ---
 
