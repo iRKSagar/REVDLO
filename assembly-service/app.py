@@ -25,6 +25,10 @@ VOICE_URL = 'https://voice.rkinfoarch.workers.dev/'
 IMAGE_URL = 'https://image.rkinfoarch.workers.dev/'
 BEARER = 'mroldverdict_xK9mP1978'
 
+YT_CLIENT_ID = os.environ.get('YT_CLIENT_ID')
+YT_CLIENT_SECRET = os.environ.get('YT_CLIENT_SECRET')
+YT_REFRESH_TOKEN = os.environ.get('YT_REFRESH_TOKEN')
+
 
 def check_auth(req):
     auth = req.headers.get('Authorization', '')
@@ -643,6 +647,10 @@ def run_pipeline_job():
 
         print(f'[Pipeline] Done. Video URL: {video_url}')
 
+        # Step 5: Publish to YouTube
+        print('[Pipeline] Step 5: Publishing to YouTube...')
+        publish_job(script_id)
+
     except Exception as e:
         import traceback
         print(f'[Pipeline] Error: {e}')
@@ -783,3 +791,217 @@ def assemble():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
+
+# ─────────────────────────────────────────────
+# YOUTUBE PUBLISH
+# ─────────────────────────────────────────────
+
+def get_youtube_access_token():
+    """Exchange refresh token for a fresh access token."""
+    res = requests.post(
+        'https://oauth2.googleapis.com/token',
+        data={
+            'client_id': YT_CLIENT_ID,
+            'client_secret': YT_CLIENT_SECRET,
+            'refresh_token': YT_REFRESH_TOKEN,
+            'grant_type': 'refresh_token'
+        },
+        timeout=30
+    )
+    res.raise_for_status()
+    data = res.json()
+    if 'access_token' not in data:
+        raise Exception(f'Failed to get access token: {data}')
+    return data['access_token']
+
+
+def get_next_unpublished():
+    """Get oldest script with video_url that has not been published."""
+    res = requests.get(
+        f'{SUPABASE_URL}/rest/v1/scripts?published=eq.false&select=id,setup,lines&order=created_at.asc&limit=1',
+        headers={'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
+    )
+    res.raise_for_status()
+    scripts = res.json()
+    if not scripts:
+        return None, None
+
+    script = scripts[0]
+    script_id = script['id']
+
+    # Get video record for this script
+    vres = requests.get(
+        f'{SUPABASE_URL}/rest/v1/videos?script_id=eq.{script_id}&limit=1',
+        headers={'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
+    )
+    vres.raise_for_status()
+    videos = vres.json()
+    if not videos or not videos[0].get('video_url'):
+        return None, None
+
+    return script, videos[0]
+
+
+def upload_to_youtube(video_path, title, description, access_token):
+    """Upload video to YouTube using resumable upload."""
+    # Step 1: Initialize resumable upload
+    metadata = {
+        'snippet': {
+            'title': title,
+            'description': description,
+            'tags': ['mroldverdict', 'shorts', 'comedy', 'wisdom', 'observations'],
+            'categoryId': '22'
+        },
+        'status': {
+            'privacyStatus': 'public',
+            'selfDeclaredMadeForKids': False
+        }
+    }
+
+    init_res = requests.post(
+        'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',
+        headers={
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json',
+            'X-Upload-Content-Type': 'video/mp4'
+        },
+        json=metadata,
+        timeout=30
+    )
+    init_res.raise_for_status()
+    upload_url = init_res.headers.get('Location')
+
+    if not upload_url:
+        raise Exception('No upload URL returned from YouTube')
+
+    # Step 2: Upload video bytes
+    with open(video_path, 'rb') as f:
+        video_data = f.read()
+
+    upload_res = requests.put(
+        upload_url,
+        headers={
+            'Content-Type': 'video/mp4',
+            'Content-Length': str(len(video_data))
+        },
+        data=video_data,
+        timeout=300
+    )
+    upload_res.raise_for_status()
+    yt_data = upload_res.json()
+    return yt_data.get('id')
+
+
+def mark_published(script_id, youtube_url):
+    """Mark script as published in Supabase."""
+    requests.patch(
+        f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id}',
+        headers={
+            'apikey': SUPABASE_KEY,
+            'Authorization': f'Bearer {SUPABASE_KEY}',
+            'Content-Type': 'application/json'
+        },
+        json={
+            'published': True,
+            'published_at': 'now()'
+        },
+        timeout=30
+    )
+
+
+def publish_job(script_id_override=None):
+    """Publish next unpublished video to YouTube."""
+    print('[Publish] Starting publish job...')
+    video_path = None
+
+    try:
+        if script_id_override:
+            # Manual: publish specific script
+            script_res = requests.get(
+                f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id_override}&limit=1&select=id,setup,lines',
+                headers={'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
+            )
+            scripts = script_res.json()
+            if not scripts:
+                print(f'[Publish] Script {script_id_override} not found')
+                return
+            script = scripts[0]
+            vres = requests.get(
+                f'{SUPABASE_URL}/rest/v1/videos?script_id=eq.{script_id_override}&limit=1',
+                headers={'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
+            )
+            videos = vres.json()
+            if not videos or not videos[0].get('video_url'):
+                print(f'[Publish] No video_url for script {script_id_override}')
+                return
+            video_record = videos[0]
+        else:
+            script, video_record = get_next_unpublished()
+            if not script:
+                print('[Publish] No unpublished videos found')
+                return
+
+        script_id = script['id']
+        setup = script.get('setup', '')
+        lines = script.get('lines', [])
+        if isinstance(lines, str):
+            lines = json.loads(lines)
+
+        # Title = setup card text
+        title = setup[:100] if setup else 'Mr. Oldverdict'
+
+        # Description = both lines + hashtags
+        line_texts = [strip_emotion_tags(l.get('text', '')) for l in lines]
+        description = '\n'.join(line_texts)
+        description += '\n\n#mroldverdict #shorts #comedy #wisdom #observations'
+
+        print(f'[Publish] Script: {script_id}')
+        print(f'[Publish] Title: {title}')
+
+        # Download video
+        video_url = video_record['video_url']
+        video_path = download_file(video_url, '.mp4')
+        print(f'[Publish] Video downloaded: {video_path}')
+
+        # Get fresh access token
+        access_token = get_youtube_access_token()
+        print('[Publish] Access token obtained')
+
+        # Upload to YouTube
+        yt_id = upload_to_youtube(video_path, title, description, access_token)
+        yt_url = f'https://www.youtube.com/shorts/{yt_id}'
+        print(f'[Publish] Uploaded to YouTube: {yt_url}')
+
+        # Mark published
+        mark_published(script_id, yt_url)
+        print(f'[Publish] Done. {yt_url}')
+
+    except Exception as e:
+        import traceback
+        print(f'[Publish] Error: {e}')
+        print(traceback.format_exc())
+
+    finally:
+        if video_path and os.path.exists(video_path):
+            try:
+                os.unlink(video_path)
+            except Exception:
+                pass
+
+
+@app.route('/publish', methods=['POST'])
+def publish():
+    if not check_auth(request):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    data = request.get_json() or {}
+    script_id = data.get('script_id')  # optional — if omitted picks next unpublished
+
+    thread = threading.Thread(target=publish_job, args=(script_id,), daemon=True)
+    thread.start()
+
+    return jsonify({
+        'status': 'Publish started',
+        'message': 'Uploading to YouTube in background'
+    }), 202
