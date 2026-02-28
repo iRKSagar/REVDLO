@@ -2,9 +2,6 @@ name = "voice"
 main = "voice-worker/src/index.js"
 compatibility_date = "2024-01-01"
 
-[triggers]
-crons = ["0 7 * * *", "0 18 * * *"]
-
 [vars]
 WORKER_DOMAIN = "voice.rkinfoarch.workers.dev"
 
@@ -14,4 +11,3 @@ WORKER_DOMAIN = "voice.rkinfoarch.workers.dev"
 # COUNCIL_SECRET
 # ELEVENLABS_API_KEY
 # ELEVENLABS_VOICE_ID
-
