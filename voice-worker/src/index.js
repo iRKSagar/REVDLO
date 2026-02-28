@@ -140,13 +140,11 @@ async function updateVideoRecord(supabaseUrl, supabaseKey, scriptId, audioUrl) {
 function buildFullScript(lines) {
   // Combine all lines into one clean text for ElevenLabs
   // Use punctuation to create natural pauses between lines
-  // Period + ellipsis creates the longest natural pause in TTS
-  return lines
+  const built = lines
     .map((line, index) => {
       let text = line.text;
       if (index < lines.length - 1) {
         if (line.pause_after) {
-          // Long pause after this line
           text += '...';
         } else {
           text += '.';
@@ -156,6 +154,9 @@ function buildFullScript(lines) {
     })
     .join('  ')
     .trim();
+
+  // Add trailing pause so audio does not end sharp
+  return built + '...';
 }
 
 export default {
