@@ -90,13 +90,7 @@ async function initiateImageGeneration(leonardoKey, prompt) {
       height: 1024,
       guidance_scale: 7,
       num_inference_steps: 30,
-      public: false,
-      imagePrompts: [
-        {
-          imageUrl: REFERENCE_IMAGE_URL,
-          aiInitImageStrength: 25
-        }
-      ]
+      public: false
     })
   });
 
