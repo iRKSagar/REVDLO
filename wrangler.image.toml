@@ -2,9 +2,6 @@ name = "image"
 main = "image-worker/src/index.js"
 compatibility_date = "2024-01-01"
 
-[triggers]
-crons = ["30 7 * * *", "30 18 * * *"]
-
 [vars]
 WORKER_DOMAIN = "image.rkinfoarch.workers.dev"
 
