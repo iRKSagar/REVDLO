@@ -140,10 +140,10 @@ def publish_to_youtube_job(script_id):
             lines = json.loads(lines)
 
         # Build YouTube title and description
-        title = setup[:100]
+        title = setup[:93] + ' #Shorts'
         line1 = strip_emotion_tags(lines[0]['text']) if lines else ''
         line2 = lines[1]['text'] if len(lines) > 1 else ''
-        description = f'{line1}\n\n{line2}\n\n#mroldverdict #shorts #comedy #wisdom #observations'
+        description = f'{line1}\n\n{line2}\n\n#mroldverdict #Shorts #comedy #wisdom #observations'
 
         tags = ['mroldverdict', 'shorts', 'comedy', 'wisdom', 'observations', 'oldverdict']
 
@@ -791,7 +791,6 @@ def run_pipeline_job():
             publish_to_youtube_job(script_id)
         else:
             print('[Pipeline] YouTube credentials not set. Skipping publish.')
-
     except Exception as e:
         import traceback
         print(f'[Pipeline] Error: {e}')
@@ -837,14 +836,13 @@ def publish():
     if not script_id:
         return jsonify({'error': 'script_id is required'}), 400
 
-    thread = threading.Thread(target=publish_to_youtube_job, args=(script_id,), daemon=True)
-    thread.start()
+    # Run synchronously — Render can hold the connection
+    publish_to_youtube_job(script_id)
 
     return jsonify({
-        'status': 'Publish started',
-        'script_id': script_id,
-        'message': 'Uploading to YouTube in background. Check Render logs.'
-    }), 202
+        'status': 'Publish complete',
+        'script_id': script_id
+    }), 200
 
 
 @app.route('/assemble', methods=['POST'])
