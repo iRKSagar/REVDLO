@@ -103,7 +103,7 @@ def build_caption_clips(lines, video_duration, video_width, video_height):
                 text,
                 fontsize=42,
                 color='white',
-                font='DejaVu-Sans-Bold',
+                font='DejaVu-Serif-Bold',
                 method='caption',
                 size=(video_width - 80, None),
                 stroke_color='black',
@@ -175,7 +175,7 @@ def build_outro_card(video_width, video_height, outro_audio_path=None, duration=
             "Mr. Oldverdict",
             fontsize=58,
             color='white',
-            font='DejaVu-Sans-Bold',
+            font='DejaVu-Serif-Bold',
             method='label',
             align='center'
         )
@@ -187,7 +187,7 @@ def build_outro_card(video_width, video_height, outro_audio_path=None, duration=
             "Been watching since before.",
             fontsize=32,
             color='#aaaaaa',
-            font='DejaVu-Sans',
+            font='DejaVu-Serif',
             method='label',
             align='center'
         )
@@ -199,7 +199,7 @@ def build_outro_card(video_width, video_height, outro_audio_path=None, duration=
             "@mroldverdict",
             fontsize=28,
             color='#888888',
-            font='DejaVu-Sans',
+            font='DejaVu-Serif',
             method='label',
             align='center'
         )
@@ -251,7 +251,7 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
             "Been watching since before.",
             fontsize=26,
             color='#888888',
-            font='DejaVu-Sans',
+            font='DejaVu-Serif',
             method='label',
             align='center'
         ).set_position(('center', int(video_height * 0.32)))
@@ -273,7 +273,7 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
                 partial_text,
                 fontsize=42,
                 color='white',
-                font='DejaVu-Sans',
+                font='DejaVu-Serif',
                 method='caption',
                 size=(video_width - 120, None),
                 align='center'
@@ -290,7 +290,7 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
             setup_text,
             fontsize=42,
             color='white',
-            font='DejaVu-Sans',
+            font='DejaVu-Serif',
             method='caption',
             size=(video_width - 120, None),
             align='center'
@@ -305,19 +305,26 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
         all_clips = [bg_clip, label_clip] + frames_clips + [final_txt]
         card = CompositeVideoClip(all_clips, size=(video_width, video_height)).set_duration(duration)
 
-        # Add typewriter sound if available - loop to fill type duration
+        # Add typewriter sound synced to typing start and end
         if typewriter_sound_path and os.path.exists(typewriter_sound_path):
             try:
                 from moviepy.editor import AudioFileClip as _AFC
                 from moviepy.audio.AudioClip import concatenate_audioclips
+                from moviepy.audio.AudioClip import AudioClip
+                import numpy as np
                 tw_audio = _AFC(typewriter_sound_path)
-                # Type duration is from 0.5s to last_end
+                # Typing starts at 0.5s and ends at last_end
                 type_dur = last_end - 0.5
-                # Loop the typewriter sound to fill the typing duration
-                loops_needed = int(type_dur / tw_audio.duration) + 1
+                # Loop to fill exact typing duration
+                loops_needed = int(type_dur / tw_audio.duration) + 2
                 looped = concatenate_audioclips([tw_audio] * loops_needed)
-                tw_trimmed = looped.subclip(0, type_dur).audio_fadeout(0.5)
-                card = card.set_audio(tw_trimmed)
+                tw_trimmed = looped.subclip(0, type_dur).audio_fadeout(0.4)
+                # Add silence before typing starts so audio aligns with text
+                silence_frames = int(0.5 * tw_trimmed.fps) if hasattr(tw_trimmed, 'fps') else 22050 // 2
+                silence = AudioClip(lambda t: np.zeros((2,) if tw_trimmed.nchannels == 2 else (1,)), duration=0.5, fps=44100)
+                from moviepy.audio.AudioClip import concatenate_audioclips as _cat
+                synced_audio = _cat([silence, tw_trimmed])
+                card = card.set_audio(synced_audio)
             except Exception as e:
                 print(f'Typewriter audio failed: {e}')
 
@@ -373,7 +380,7 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
             "@mroldverdict",
             fontsize=24,
             color='white',
-            font='DejaVu-Sans',
+            font='DejaVu-Serif',
             method='label'
         )
         .set_opacity(0.45)
