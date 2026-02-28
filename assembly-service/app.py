@@ -427,9 +427,11 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
     silence_post = AudioClip(lambda t: np.zeros(2), duration=post_hold, fps=44100)
     extended_audio = concatenate_audioclips([silence_pre, audio_faded, silence_post])
 
-    # Image and dark band cover full duration
+    # Image covers full duration
     image_clip = image_clip.set_duration(total_image_duration)
-    dark_band = dark_band.set_duration(total_image_duration)
+
+    # Dark band only during pre-hold + voice section, fades out before post-voice hold
+    dark_band = dark_band.set_duration(pre_hold + duration).set_start(0)
 
     # Captions start at pre_hold and run for voice duration only
     caption_clips = [c.set_start(c.start + pre_hold) for c in caption_clips]
@@ -452,6 +454,9 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
         setup_card = build_setup_card(setup_text, target_width, target_height, image_path=image_path, duration=5.0, typewriter_sound_path=typewriter_sound_path)
         if setup_card:
             clips.append(setup_card)
+            # Brief black gap before Mr. Oldverdict appears
+            brief_gap = _ColorClip(size=(target_width, target_height), color=(0,0,0)).set_duration(0.5)
+            clips.append(brief_gap)
 
     clips.append(main_clip)
 
