@@ -195,18 +195,6 @@ def build_outro_card(video_width, video_height, outro_audio_path=None, duration=
         .set_position(('center', video_height * 0.50))
         .set_duration(duration))
 
-        # Handle
-        handle_clip = (TextClip(
-            "@mroldverdict",
-            fontsize=28,
-            color='#888888',
-            font='DejaVu-Serif',
-            method='label',
-            align='center'
-        )
-        .set_position(('center', video_height * 0.56))
-        .set_duration(duration))
-
         # Daily dose line
         follow_clip = (TextClip(
             "Your daily dose of old wisdom.",
@@ -231,7 +219,7 @@ def build_outro_card(video_width, video_height, outro_audio_path=None, duration=
         .set_position(('center', video_height * 0.70))
         .set_duration(duration))
 
-        outro = CompositeVideoClip([bg, name_clip, tagline_clip, handle_clip, follow_clip, follow2_clip], size=(video_width, video_height))
+        outro = CompositeVideoClip([bg, name_clip, tagline_clip, follow_clip, follow2_clip], size=(video_width, video_height))
 
         # Add outro sound if available
         if outro_audio_path and os.path.exists(outro_audio_path):
