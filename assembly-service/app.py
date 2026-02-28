@@ -454,7 +454,7 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
     clips = []
 
     if setup_text:
-        setup_card = build_setup_card(setup_text, target_width, target_height, image_path=image_path, duration=5.5, typewriter_sound_path=typewriter_sound_path, logo_path=logo_path)
+        setup_card = build_setup_card(setup_text, target_width, target_height, image_path=image_path, duration=6.0, typewriter_sound_path=typewriter_sound_path, logo_path=logo_path)
         if setup_card:
             # Fade out setup card so main video fades in bright
             setup_card = setup_card.fadeout(0.8)
