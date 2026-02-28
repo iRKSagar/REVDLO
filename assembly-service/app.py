@@ -50,7 +50,7 @@ def get_video_record(script_id):
 
 def get_script(script_id):
     response = requests.get(
-        f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id}&limit=1',
+        f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id}&limit=1&select=*',
         headers={
             'apikey': SUPABASE_KEY,
             'Authorization': f'Bearer {SUPABASE_KEY}'
@@ -329,7 +329,8 @@ def upload_video(script_id, video_path):
             'apikey': SUPABASE_KEY,
             'Authorization': f'Bearer {SUPABASE_KEY}',
             'Content-Type': 'video/mp4',
-            'Cache-Control': '3600'
+            'Cache-Control': '3600',
+            'x-upsert': 'true'
         },
         data=video_data,
         timeout=120
@@ -426,6 +427,9 @@ def assemble():
         })
 
     except Exception as e:
+        import traceback
+        print(f"Assembly error: {str(e)}")
+        print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
     finally:
