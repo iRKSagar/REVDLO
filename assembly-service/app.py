@@ -408,15 +408,26 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
         print(f'Watermark failed: {e}')
         main_layers = [image_clip, dark_band] + caption_clips
 
-    # Compose main video
-    main_clip = CompositeVideoClip(main_layers, size=(target_width, target_height))
-
     # Fade in audio so voice does not hit hard on the ears
     audio_faded = audio.audio_fadein(0.4).audio_fadeout(0.5)
-    main_clip = main_clip.set_audio(audio_faded)
 
-    # Fade out the main clip visually before outro
-    main_clip = main_clip.fadeout(0.6)
+    # Extend audio with 2 seconds of silence so image holds after voice ends
+    from moviepy.audio.AudioClip import AudioClip
+    import numpy as np
+    silence = AudioClip(lambda t: np.zeros(2), duration=2.0, fps=44100)
+    from moviepy.audio.AudioClip import concatenate_audioclips
+    extended_audio = concatenate_audioclips([audio_faded, silence])
+    hold_duration = duration + 2.0
+    image_clip = image_clip.set_duration(hold_duration)
+    dark_band = dark_band.set_duration(hold_duration)
+    caption_clips = [(c.set_duration(min(c.duration, duration))) for c in caption_clips]
+    try:
+        watermark = watermark.set_duration(hold_duration)
+        main_layers = [image_clip, dark_band] + caption_clips + [watermark]
+    except:
+        main_layers = [image_clip, dark_band] + caption_clips
+    main_clip = CompositeVideoClip(main_layers, size=(target_width, target_height))
+    main_clip = main_clip.set_audio(extended_audio).set_duration(hold_duration).fadeout(0.6)
 
     # Add setup card at the start and outro card at the end
     from moviepy.editor import concatenate_videoclips, ColorClip as _ColorClip
