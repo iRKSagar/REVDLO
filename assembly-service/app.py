@@ -537,8 +537,11 @@ def assemble():
         if outro_bg_url:
             try:
                 outro_bg_path = download_file(outro_bg_url, '.jpg')
+                print(f'Outro bg downloaded: {outro_bg_path}, exists: {os.path.exists(outro_bg_path) if outro_bg_path else False}')
             except Exception as e:
                 print(f'Outro bg download failed: {e}')
+        else:
+            print('Outro bg URL not found in settings')
 
         # Output path
         output_path = tempfile.mktemp(suffix='.mp4')
