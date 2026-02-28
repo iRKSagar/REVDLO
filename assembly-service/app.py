@@ -140,6 +140,23 @@ def get_outro_sound_url(supabase_url, supabase_key):
     return None
 
 
+def get_setting(supabase_url, supabase_key, key):
+    try:
+        response = requests.get(
+            f'{supabase_url}/rest/v1/settings?key=eq.{key}&limit=1',
+            headers={
+                'apikey': supabase_key,
+                'Authorization': f'Bearer {supabase_key}'
+            }
+        )
+        data = response.json()
+        if data and data[0].get('value'):
+            return data[0]['value']
+    except Exception as e:
+        print(f'Failed to fetch setting {key}: {e}')
+    return None
+
+
 def build_outro_card(video_width, video_height, outro_audio_path=None, duration=3.0):
     """Build the outro card with Mr. Oldverdict branding."""
     try:
@@ -200,7 +217,7 @@ def build_outro_card(video_width, video_height, outro_audio_path=None, duration=
         return None
 
 
-def build_setup_card(setup_text, video_width, video_height, image_path=None, duration=5.0):
+def build_setup_card(setup_text, video_width, video_height, image_path=None, duration=5.0, typewriter_sound_path=None):
     """Build a typewriter-effect setup card with optional background image."""
     try:
         from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, ImageClip, concatenate_videoclips
@@ -281,14 +298,27 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
         label_clip = label.set_duration(duration)
 
         all_clips = [bg_clip, label_clip] + frames_clips + [final_txt]
-        return CompositeVideoClip(all_clips, size=(video_width, video_height)).set_duration(duration)
+        card = CompositeVideoClip(all_clips, size=(video_width, video_height)).set_duration(duration)
+
+        # Add typewriter sound if available
+        if typewriter_sound_path and os.path.exists(typewriter_sound_path):
+            try:
+                from moviepy.editor import AudioFileClip as _AFC
+                tw_audio = _AFC(typewriter_sound_path)
+                tw_duration = min(tw_audio.duration, duration - 0.5)
+                tw_audio = tw_audio.subclip(0, tw_duration).audio_fadeout(0.4)
+                card = card.set_audio(tw_audio)
+            except Exception as e:
+                print(f'Typewriter audio failed: {e}')
+
+        return card
 
     except Exception as e:
         print(f'Setup card failed: {e}')
         return None
 
 
-def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, outro_sound_path=None):
+def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, outro_sound_path=None, typewriter_sound_path=None):
     # Load audio to get duration
     audio = AudioFileClip(audio_path)
     duration = audio.duration
@@ -346,27 +376,36 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
 
     # Compose main video
     main_clip = CompositeVideoClip(main_layers, size=(target_width, target_height))
-    main_clip = main_clip.set_audio(audio)
+
+    # Fade in audio so voice does not hit hard on the ears
+    audio_faded = audio.audio_fadein(0.4).audio_fadeout(0.5)
+    main_clip = main_clip.set_audio(audio_faded)
+
+    # Fade out the main clip visually before outro
+    main_clip = main_clip.fadeout(0.6)
 
     # Add setup card at the start and outro card at the end
-    from moviepy.editor import concatenate_videoclips
+    from moviepy.editor import concatenate_videoclips, ColorClip as _ColorClip
     clips = []
 
     if setup_text:
-        setup_card = build_setup_card(setup_text, target_width, target_height, image_path=image_path, duration=5.0)
+        setup_card = build_setup_card(setup_text, target_width, target_height, image_path=image_path, duration=5.0, typewriter_sound_path=typewriter_sound_path)
         if setup_card:
+            # 1.5 second silence after setup before voice starts
+            silence_gap = _ColorClip(size=(target_width, target_height), color=(10,10,10)).set_duration(1.5)
             clips.append(setup_card)
+            clips.append(silence_gap)
 
     clips.append(main_clip)
 
-    # Add 1.5 second black pause between voice and outro
-    from moviepy.editor import ColorClip as _ColorClip
-    gap = _ColorClip(size=(target_width, target_height), color=(0,0,0)).set_duration(1.5)
-    clips.append(gap)
+    # 1.5 second fade to black before outro
+    fade_gap = _ColorClip(size=(target_width, target_height), color=(0,0,0)).set_duration(1.5)
+    clips.append(fade_gap)
 
     outro_audio_path = outro_sound_path
-    outro_card = build_outro_card(target_width, target_height, outro_audio_path=outro_audio_path, duration=3.0)
+    outro_card = build_outro_card(target_width, target_height, outro_audio_path=outro_audio_path, duration=3.5)
     if outro_card:
+        outro_card = outro_card.fadein(0.5)
         clips.append(outro_card)
 
     if len(clips) > 1:
@@ -452,8 +491,9 @@ def assemble():
         video_record = get_video_record(script_id)
         script = get_script(script_id)
 
-        # Fetch outro sound URL
+        # Fetch outro and typewriter sound URLs
         outro_sound_url = get_outro_sound_url(SUPABASE_URL, SUPABASE_KEY)
+        typewriter_sound_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'typewriter_sound_url')
 
         image_url = video_record.get('image_url')
         audio_url = video_record.get('voice_file_url')
@@ -467,13 +507,20 @@ def assemble():
         image_path = download_file(image_url, '.jpg')
         audio_path = download_file(audio_url, '.mp3')
 
-        # Download outro sound if available
+        # Download outro and typewriter sounds if available
         outro_sound_path = None
         if outro_sound_url:
             try:
                 outro_sound_path = download_file(outro_sound_url, '.mp3')
             except Exception as e:
                 print(f'Outro sound download failed: {e}')
+
+        typewriter_sound_path = None
+        if typewriter_sound_url:
+            try:
+                typewriter_sound_path = download_file(typewriter_sound_url, '.mp3')
+            except Exception as e:
+                print(f'Typewriter sound download failed: {e}')
 
         # Output path
         output_path = tempfile.mktemp(suffix='.mp4')
@@ -488,7 +535,7 @@ def assemble():
         print(f"Lines: {lines}")
 
         # Assemble video
-        assemble_video(image_path, audio_path, lines, output_path, setup_text, outro_sound_path)
+        assemble_video(image_path, audio_path, lines, output_path, setup_text, outro_sound_path, typewriter_sound_path)
 
         # Upload to Supabase
         video_url = upload_video(script_id, output_path)
@@ -510,7 +557,7 @@ def assemble():
 
     finally:
         # Clean up temp files
-        for path in [image_path, audio_path, output_path]:
+        for path in [image_path, audio_path, output_path, outro_sound_path, typewriter_sound_path]:
             if path and os.path.exists(path):
                 try:
                     os.unlink(path)
