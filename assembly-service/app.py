@@ -78,22 +78,23 @@ def build_caption_clips(lines, video_duration, video_width, video_height):
     if num_lines == 0:
         return caption_clips
 
-    # Divide video duration across lines
-    # First line gets more time if it has pause_after
-    segment_duration = video_duration / num_lines
-    current_time = 0
-
+    # Use character count as proxy for speech time to sync captions with voice
+    # Strip emotion tags to get actual spoken text length
+    cleaned = [strip_emotion_tags(l.get('text', '')) for l in lines]
+    char_counts = [max(len(t), 1) for t in cleaned]
+    # Add weight for pause_after lines (they have trailing ellipsis in audio)
+    weights = []
     for i, line in enumerate(lines):
-        text = strip_emotion_tags(line.get('text', ''))
-        pause_after = line.get('pause_after', False)
+        w = char_counts[i]
+        if line.get('pause_after', False):
+            w *= 1.4  # pause after adds roughly 40% more time
+        weights.append(w)
+    total_weight = sum(weights)
 
-        # Duration for this line
-        if pause_after and i < num_lines - 1:
-            duration = segment_duration * 1.3
-        else:
-            duration = segment_duration * 0.7 if i == num_lines - 1 else segment_duration
-
-        # Clamp to video duration
+    current_time = 0
+    for i, line in enumerate(lines):
+        text = cleaned[i]
+        duration = (weights[i] / total_weight) * video_duration
         duration = min(duration, video_duration - current_time)
         if duration <= 0:
             break
