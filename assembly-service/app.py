@@ -276,8 +276,25 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
     # Build caption clips
     caption_clips = build_caption_clips(lines, duration, target_width, target_height)
 
+    # Watermark
+    try:
+        watermark = (TextClip(
+            "@mroldverdict",
+            fontsize=24,
+            color='white',
+            font='DejaVu-Sans',
+            method='label'
+        )
+        .set_opacity(0.45)
+        .set_position((target_width - 180, target_height - 50))
+        .set_duration(audio.duration))
+        main_layers = [image_clip, dark_band] + caption_clips + [watermark]
+    except Exception as e:
+        print(f'Watermark failed: {e}')
+        main_layers = [image_clip, dark_band] + caption_clips
+
     # Compose main video
-    main_clip = CompositeVideoClip([image_clip, dark_band] + caption_clips, size=(target_width, target_height))
+    main_clip = CompositeVideoClip(main_layers, size=(target_width, target_height))
     main_clip = main_clip.set_audio(audio)
 
     # Add setup card at the start and outro card at the end
