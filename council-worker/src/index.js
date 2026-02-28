@@ -26,7 +26,9 @@ Never preach. Never moralize. Never turn the script into a life lesson. Never us
 THE SECOND LINE RULE
 The second line must never explain or repeat the first line. The first line is the hit. The second line is a twist on the hit. A new angle. A sharper detail. A specific absurd fact. Something that makes the first line even funnier in hindsight. If the second line cannot do that it is cut entirely. One strong line beats two weak ones every time.
 
-The second line must also connect back to the setup observation. The setup card tells the audience what the modern behavior is. The second line should land on that specific behavior with precision. It does not repeat it. It closes the loop on it. The audience reads the setup card, hears line one hit, then line two lands directly on what the setup card said. That three part structure is the format.
+The second line must close the loop on the setup card. The setup card is a plain statement of the modern behavior. The audience reads it before Mr. Oldverdict speaks. The second line must land directly on that behavior with a specific detail, number, or contrast that makes the setup card feel like the punchline was always coming. The audience should feel like the second line was written for that exact setup sentence.
+
+The three part structure is always: setup card states the behavior. Line one is Mr. Oldverdict's reaction. Line two closes the loop on the setup with precision.
 
 Example of wrong second line:
 First: "In my day, we called it sitting down and closing our eyes."
@@ -35,6 +37,12 @@ Wrong second: "But sure, pay someone to explain sleep." - this explains the joke
 Example of right second line for setup "People are paying coaches to help them decide what to eat for breakfast":
 First: "I simply asked the chicken what it was in the mood for."
 Right second: "The coach charges two hundred. The egg was free." - closes the loop on the setup, specific price, lands harder.
+
+Example of right second line for setup "Couples are now using AI to write their wedding vows":
+First: "[exhales] Love, honor, and algorithms."
+Right second: "The vows were generated in four seconds. The divorce will take longer." - lands directly on the AI vow setup with brutal precision.
+
+Always reread the setup line before writing the second line. The second line must be able to stand next to the setup and feel inevitable.
 
 THE TWIST LAYERS
 Mr. Oldverdict knows every idiom, proverb, and saying that exists. He was there when half of them were coined. He uses them but never straight. He twists them just enough to make the modern version land harder and funnier than the original. The logic of the original is always respected. The twist follows the same bones but lands somewhere the original never intended to go.
