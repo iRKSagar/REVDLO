@@ -412,23 +412,37 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
     # Fade in audio so voice does not hit hard on the ears
     audio_faded = audio.audio_fadein(0.4).audio_fadeout(0.5)
 
-    # Extend audio with 2 seconds of silence so image holds after voice ends
-    from moviepy.audio.AudioClip import AudioClip
+    # Video structure:
+    # Phase 1: 1 second image with no voice, no captions (pre-voice hold)
+    # Phase 2: voice duration with captions
+    # Phase 3: 2 seconds image with no captions (post-voice hold)
+    pre_hold = 1.0
+    post_hold = 2.0
+    total_image_duration = pre_hold + duration + post_hold
+
+    # Extend audio with silence for pre and post holds
+    from moviepy.audio.AudioClip import AudioClip, concatenate_audioclips
     import numpy as np
-    silence = AudioClip(lambda t: np.zeros(2), duration=2.0, fps=44100)
-    from moviepy.audio.AudioClip import concatenate_audioclips
-    extended_audio = concatenate_audioclips([audio_faded, silence])
-    hold_duration = duration + 2.0
-    image_clip = image_clip.set_duration(hold_duration)
-    dark_band = dark_band.set_duration(hold_duration)
-    caption_clips = [(c.set_duration(min(c.duration, duration))) for c in caption_clips]
+    silence_pre = AudioClip(lambda t: np.zeros(2), duration=pre_hold, fps=44100)
+    silence_post = AudioClip(lambda t: np.zeros(2), duration=post_hold, fps=44100)
+    extended_audio = concatenate_audioclips([silence_pre, audio_faded, silence_post])
+
+    # Image and dark band cover full duration
+    image_clip = image_clip.set_duration(total_image_duration)
+    dark_band = dark_band.set_duration(total_image_duration)
+
+    # Captions start at pre_hold and run for voice duration only
+    caption_clips = [c.set_start(c.start + pre_hold) for c in caption_clips]
+
+    # Watermark covers full image duration
     try:
-        watermark = watermark.set_duration(hold_duration)
+        watermark = watermark.set_duration(total_image_duration)
         main_layers = [image_clip, dark_band] + caption_clips + [watermark]
     except:
         main_layers = [image_clip, dark_band] + caption_clips
+
     main_clip = CompositeVideoClip(main_layers, size=(target_width, target_height))
-    main_clip = main_clip.set_audio(extended_audio).set_duration(hold_duration).fadeout(0.6)
+    main_clip = main_clip.set_audio(extended_audio).set_duration(total_image_duration).fadeout(0.6)
 
     # Add setup card at the start and outro card at the end
     from moviepy.editor import concatenate_videoclips, ColorClip as _ColorClip
@@ -437,10 +451,7 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
     if setup_text:
         setup_card = build_setup_card(setup_text, target_width, target_height, image_path=image_path, duration=5.0, typewriter_sound_path=typewriter_sound_path)
         if setup_card:
-            # 1.5 second silence after setup before voice starts
-            silence_gap = _ColorClip(size=(target_width, target_height), color=(10,10,10)).set_duration(1.0)
             clips.append(setup_card)
-            clips.append(silence_gap)
 
     clips.append(main_clip)
 
