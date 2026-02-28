@@ -1,6 +1,6 @@
 # MR. OLDVERDICT - MASTER DOCUMENT
 ## Complete knowledge transfer. Every detail. Nothing left out.
-## Last updated: Session March 1 2026 — Publish worker (YouTube) complete
+## Last updated: March 1 2026, 3:25 AM — First video live on YouTube. Full pipeline automated.
 
 ---
 
@@ -378,6 +378,8 @@ All 10 videos assembled and stored in Supabase storage.
 - [x] Supabase storage cleaned of test data.
 - [x] Reference image locked.
 - [x] Orchestration worker. Full pipeline automation. Cron fires at 8 PM and 11 AM UTC. Council auto-selects topic. Voice + image parallel. Assembly on Render background thread. Tested and confirmed working February 28 2026.
+- [x] YouTube publish worker. Render `/publish` route. Synchronous upload via YouTube Data API v3 resumable upload. Auto-fires after every assembly in `run_pipeline_job`. Manual trigger available.
+- [x] First video published to YouTube. March 1 2026, 3:25 AM. Script: ad5816e7 (Professional cuddlers). Channel: @mroldverdict.
 - [x] YouTube publish worker. /publish route on Render. OAuth2 refresh token flow. Resumable upload to YouTube Data API v3. Auto-publishes after assembly in pipeline. Manual trigger also available.
 - [x] YouTube channel created. @mroldverdict. mroldverdict@gmail.com Google account.
 
@@ -385,17 +387,21 @@ All 10 videos assembled and stored in Supabase storage.
 
 ## 19. WHAT IS PENDING
 
+### URGENT — Must do before March 8 2026
+- [ ] **OAuth consent screen to Production**: Currently in Testing mode. Refresh token expires in 7 days (March 7). Go to Google Cloud Console → APIs & Services → OAuth consent screen → Publish app → Submit for verification OR switch to Production. If this is not done YouTube publishing stops on March 7.
+
 ### Immediate
+- [ ] **Publish remaining 9 buffer videos**: Use `/publish` route manually. Script IDs in Section 16. Post 2 per day starting today.
+- [ ] **YouTube channel art**: Profile picture and banner for @mroldverdict using reference image.
 - [ ] **Character consistency**: Leonardo reference image locking. Try `init_image_id` approach. Upload reference image to Leonardo API, get internal ID, use in generation with strength 0.2-0.3.
 - [ ] **Logo regeneration**: Once character reference is locked, regenerate logo123.png using the locked face. Replace in GitHub assets.
 - [ ] **Caption sync**: Character count weighting is approximate. True sync requires per-line audio duration from ElevenLabs. ElevenLabs v3 does not return timestamps. Workaround pending.
 - [ ] **Cloudflare GitHub PR bot**: Disable in Cloudflare Settings > Git integration for each worker.
 
 ### Short Term (next session)
-- [ ] **Instagram publish**: Instagram Graph API. Requires Facebook Business account linked to Instagram. Two step process: create container, then publish. Caption: second line + hashtags.
 - [ ] **Instagram account**: Create @mroldverdict. Switch to Creator. Link Facebook page.
+- [ ] **Instagram publish**: Instagram Graph API. Two step process: create container, then publish. Caption: second line + hashtags. Build after Instagram account is created.
 - [ ] **Topics queue**: Load 60+ topics into Supabase topics table for ingestion worker to use.
-- [ ] **YouTube channel art**: Profile picture, banner using reference image.
 
 ### Future
 - [ ] Second concept (discussed, details locked for next week after full automation)
@@ -507,7 +513,42 @@ Built and confirmed working February 28 2026. Full end-to-end pipeline runs unat
 
 ---
 
-## 24. BENCHMARK LINES (Quality Bar)
+---
+
+## 25. YOUTUBE CREDENTIALS
+
+- Google account: mroldverdict@gmail.com
+- YouTube channel: @mroldverdict
+- Google Cloud project: revdlo
+- OAuth client type: Desktop app
+- Client ID: 370659147583-f9ne5g87cstg9vbbtm29d4iql3i7lpc5.apps.googleusercontent.com
+- Client secret: stored in Render environment as `YT_CLIENT_SECRET`
+- Refresh token: stored in Render environment as `YT_REFRESH_TOKEN`
+- **Refresh token expires: March 7 2026** (7 days from issue — Testing mode limitation)
+- OAuth consent screen status: Testing. Must publish to Production before March 7.
+
+### Render Environment Variables (YouTube)
+| Key | Value |
+|-----|-------|
+| YT_CLIENT_ID | 370659147583-f9ne5g87cstg9vbbtm29d4iql3i7lpc5.apps.googleusercontent.com |
+| YT_CLIENT_SECRET | stored in Render (starts with GOCSPX-) |
+| YT_REFRESH_TOKEN | stored in Render (starts with 1//0gaf) |
+
+### Publish Route
+- URL: POST https://revdlo.onrender.com/publish
+- Auth: Bearer mroldverdict_xK9mP1978
+- Body: `{ "script_id": "UUID" }`
+- Behavior: Synchronous. Holds connection until YouTube upload complete.
+- Auto-fires: After every assembly in `run_pipeline_job` if YT credentials are set.
+
+### To publish a buffer video manually:
+```javascript
+fetch("https://revdlo.onrender.com/publish", {
+  method: "POST",
+  headers: { "Authorization": "Bearer mroldverdict_xK9mP1978", "Content-Type": "application/json" },
+  body: JSON.stringify({ script_id: "FULL-UUID-HERE" })
+}).then(r => r.json()).then(console.log)
+```
 
 Every script must clear this bar before approval.
 
