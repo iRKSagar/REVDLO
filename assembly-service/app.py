@@ -323,7 +323,7 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
             try:
                 logo_img = (ImageClip(logo_path)
                     .resize(height=70)
-                    .set_position((20, 20))
+                    .set_position((24, 24))
                     .set_duration(duration))
                 logo_clips = [logo_img]
             except Exception as e:
@@ -454,7 +454,7 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
     clips = []
 
     if setup_text:
-        setup_card = build_setup_card(setup_text, target_width, target_height, image_path=image_path, duration=5.0, typewriter_sound_path=typewriter_sound_path, logo_path=logo_path)
+        setup_card = build_setup_card(setup_text, target_width, target_height, image_path=image_path, duration=5.5, typewriter_sound_path=typewriter_sound_path, logo_path=logo_path)
         if setup_card:
             # Fade out setup card so main video fades in bright
             setup_card = setup_card.fadeout(0.8)
