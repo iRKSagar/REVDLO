@@ -157,13 +157,18 @@ def get_setting(supabase_url, supabase_key, key):
     return None
 
 
-def build_outro_card(video_width, video_height, outro_audio_path=None, duration=3.0):
-    """Build the outro card with Mr. Oldverdict branding."""
+def build_outro_card(video_width, video_height, outro_audio_path=None, duration=3.0, image_path=None):
+    """Build the outro card with Mr. Oldverdict branding and character background."""
     try:
-        from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, AudioFileClip
+        from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, AudioFileClip, ImageClip
 
-        # Dark background
-        bg = ColorClip(size=(video_width, video_height), color=(10, 10, 10)).set_duration(duration)
+        # Background - darkened character image if available
+        if image_path and os.path.exists(image_path):
+            bg_img = ImageClip(image_path).resize((video_width, video_height)).set_duration(duration)
+            dark_overlay = ColorClip(size=(video_width, video_height), color=(0, 0, 0)).set_opacity(0.75).set_duration(duration)
+            bg = CompositeVideoClip([bg_img, dark_overlay], size=(video_width, video_height))
+        else:
+            bg = ColorClip(size=(video_width, video_height), color=(10, 10, 10)).set_duration(duration)
 
         # Channel name
         name_clip = (TextClip(
@@ -300,14 +305,19 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
         all_clips = [bg_clip, label_clip] + frames_clips + [final_txt]
         card = CompositeVideoClip(all_clips, size=(video_width, video_height)).set_duration(duration)
 
-        # Add typewriter sound if available
+        # Add typewriter sound if available - loop to fill type duration
         if typewriter_sound_path and os.path.exists(typewriter_sound_path):
             try:
                 from moviepy.editor import AudioFileClip as _AFC
+                from moviepy.audio.AudioClip import concatenate_audioclips
                 tw_audio = _AFC(typewriter_sound_path)
-                tw_duration = min(tw_audio.duration, duration - 0.5)
-                tw_audio = tw_audio.subclip(0, tw_duration).audio_fadeout(0.4)
-                card = card.set_audio(tw_audio)
+                # Type duration is from 0.5s to last_end
+                type_dur = last_end - 0.5
+                # Loop the typewriter sound to fill the typing duration
+                loops_needed = int(type_dur / tw_audio.duration) + 1
+                looped = concatenate_audioclips([tw_audio] * loops_needed)
+                tw_trimmed = looped.subclip(0, type_dur).audio_fadeout(0.5)
+                card = card.set_audio(tw_trimmed)
             except Exception as e:
                 print(f'Typewriter audio failed: {e}')
 
@@ -392,7 +402,7 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
         setup_card = build_setup_card(setup_text, target_width, target_height, image_path=image_path, duration=5.0, typewriter_sound_path=typewriter_sound_path)
         if setup_card:
             # 1.5 second silence after setup before voice starts
-            silence_gap = _ColorClip(size=(target_width, target_height), color=(10,10,10)).set_duration(1.5)
+            silence_gap = _ColorClip(size=(target_width, target_height), color=(10,10,10)).set_duration(1.0)
             clips.append(setup_card)
             clips.append(silence_gap)
 
@@ -403,7 +413,7 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
     clips.append(fade_gap)
 
     outro_audio_path = outro_sound_path
-    outro_card = build_outro_card(target_width, target_height, outro_audio_path=outro_audio_path, duration=3.5)
+    outro_card = build_outro_card(target_width, target_height, outro_audio_path=outro_audio_path, duration=3.5, image_path=image_path)
     if outro_card:
         outro_card = outro_card.fadein(0.5)
         clips.append(outro_card)
