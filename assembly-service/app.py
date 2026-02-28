@@ -405,9 +405,13 @@ def assemble():
         # Output path
         output_path = tempfile.mktemp(suffix='.mp4')
 
-        # Get script lines for captions and setup text
-        lines = script.get('lines', [])
-        setup_text = script.get('setup', None)
+        # Extract from nested script JSON field
+        script_data = script.get('script', {})
+        if isinstance(script_data, str):
+            import json
+            script_data = json.loads(script_data)
+        lines = script_data.get('lines', [])
+        setup_text = script_data.get('setup', None)
         print(f"Setup text: {setup_text}")
         print(f"Lines: {lines}")
 
