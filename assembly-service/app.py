@@ -50,6 +50,8 @@ def get_youtube_access_token():
 def upload_to_youtube(video_path, title, description, tags):
     """Upload video to YouTube using resumable upload. Returns YouTube video ID."""
     access_token = get_youtube_access_token()
+    print(f'[Publish] Access token obtained: {access_token[:20]}...')
+    print(f'[Publish] YT_CLIENT_ID set: {bool(YT_CLIENT_ID)}, YT_CLIENT_SECRET set: {bool(YT_CLIENT_SECRET)}, YT_REFRESH_TOKEN set: {bool(YT_REFRESH_TOKEN)}')
 
     # Step 1: Initialize resumable upload
     metadata = {
