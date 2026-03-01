@@ -387,7 +387,11 @@ All 10 videos assembled and stored in Supabase storage.
 
 ## 19. WHAT IS PENDING
 
-### URGENT — Must do before March 8 2026
+### 7 Day Review — March 8 2026
+- [ ] **Analytics review**: Check swipe away rate, average view duration, traffic source, audience geography in YouTube Studio. Current swipe away is 80% on day one — expected. Target below 60% by day 7.
+- [ ] **Setup card duration**: If swipe away remains above 70%, shorten setup card from 5.0 seconds to 3.5 seconds in app.py `build_setup_card` call. Gets to Mr. Oldverdict's face and voice faster.
+- [ ] **Best performing video**: Note which topic/category held attention longest. Skew future council generation toward that category.
+- [ ] **OAuth consent screen**: Reminder — refresh token was issued February 28. If OAuth was not fully moved to Production before this date, reissue refresh token now.
 - [ ] **OAuth consent screen to Production**: Currently in Testing mode. Refresh token expires in 7 days (March 7). Go to Google Cloud Console → APIs & Services → OAuth consent screen → Publish app → Submit for verification OR switch to Production. If this is not done YouTube publishing stops on March 7.
 
 ### Immediate
@@ -401,7 +405,7 @@ All 10 videos assembled and stored in Supabase storage.
 ### Short Term (next session)
 - [ ] **Instagram account**: Create @mroldverdict. Switch to Creator. Link Facebook page.
 - [ ] **Instagram publish**: Instagram Graph API. Two step process: create container, then publish. Caption: second line + hashtags. Build after Instagram account is created.
-- [ ] **Topics queue**: Load 60+ topics into Supabase topics table for ingestion worker to use.
+- [ ] **Expand topic ingestion beyond Reddit**: Current ingestion worker only pulls from Reddit. Need additional sources — X/Twitter trending, Google Trends, news headlines, Quora questions, LinkedIn posts, YouTube comments on viral videos, Hacker News, Product Hunt. More sources = more diverse topics = less repetition over time. This becomes critical after 60 days when Reddit topics start cycling.
 
 ### Future
 - [ ] Second concept (discussed, details locked for next week after full automation)
@@ -558,3 +562,173 @@ Every script must clear this bar before approval.
 - "I have never owed anyone anything. Apparently that is now a personality disorder." (on living without debt)
 - "The food is getting cold. But the memory is loading." (on planning instead of living)
 - "He spent his whole life chasing more. Got it. Now he is scared of losing it. Congratulations. You have upgraded your problem." (on rich man fear)
+
+---
+
+## 26. WORTHBUYING — SECOND CONCEPT
+
+### Concept
+Fully automated faceless affiliate content engine for the Indian market. Eight AI-generated family characters — no faces shown, voice only. Each character has a fixed voice and product category. Every video is a three-beat script: character in a real situation, discovers a product naturally, closes with one soft line and affiliate link. No salesperson voice. No urgency theater. Just the family talking the way they actually would.
+
+### Why It Works
+- No character consistency problem — no faces generated, only voices
+- Product images come from affiliate feeds — Leonardo not needed
+- Eight distinct voices from ElevenLabs library — no cloning required
+- Revenue from day one via affiliate commissions
+- AdSense and sponsorships as channel grows
+
+### The Eight Characters
+| Character | Role | Voice Type | Product Category |
+|-----------|------|-----------|-----------------|
+| Dadi | Grandmother | Elderly warm female | Kitchen, health, home remedies |
+| Dada | Grandfather | Elderly calm male | Tools, gardening, books |
+| Maa | Mother | Mid-age warm female | Cooking, cleaning, kids products |
+| Papa | Father | Mid-age authoritative male | Electronics, appliances, finance tools |
+| Didi | Elder sister | Young adult female | Beauty, fashion, lifestyle |
+| Bhaiya | Elder brother | Young adult male | Tech gadgets, fitness, career |
+| Chotu | Younger brother | Teen male | Gaming, stationery, snacks |
+| Nanhi | Younger sister | Teen female | Stationery, toys, trending items |
+
+### Video Layout
+```
+┌─────────────────┐
+│                 │
+│  Product image  │  ← Full screen or top 60%
+│                 │
+├─────────────────┤
+│ Caption text    │  ← Character voice playing
+│ @worthbuying    │  ← Watermark
+└─────────────────┘
+```
+
+### What Carries Over From Mr. Oldverdict (65-70%)
+- Cloudflare Workers architecture
+- Supabase schema (add concept column)
+- Render assembly service (modified layout)
+- ElevenLabs voice worker (8 voice IDs instead of 1)
+- Orchestration worker pattern
+- YouTube + Instagram publish workers (shared)
+
+### What Is New
+- Product worker — replaces ingestion. Pulls from Amazon/Flipkart affiliate APIs daily.
+- Script worker — replaces council. Routes to 1 of 8 character voices. Product-aware prompts.
+- Image worker — downloads product images from affiliate URLs. No generation needed.
+- Assembly layout — product image prominent. No character image.
+
+### Folder Structure
+```
+worthbuying/
+├── product-worker/src/index.js       # Pulls products from affiliate APIs
+├── script-worker/src/index.js        # Generates script in character voice
+├── voice-worker/src/index.js         # ElevenLabs — 8 voice IDs
+├── assembly-service/app.py           # Product image layout. Modified from Mr. Oldverdict.
+├── orchestration-worker/src/index.js # Same pattern as Mr. Oldverdict
+└── assets/
+    ├── outro-bg.jpg
+    └── logo.png
+```
+
+### Cost (Additional — on top of existing $15/month)
+| Service | Cost | Notes |
+|---------|------|-------|
+| ElevenLabs | $0 extra | Already on Starter. 8 library voices included. |
+| Leonardo | $0 | Not needed — product images from affiliate feed |
+| Render | $0 | Second free service |
+| Cloudflare | $0 | May need second account for cron slots |
+| Affiliate APIs | $0 | Amazon Associates + Flipkart — free after approval |
+| **Additional total** | **~₹500-800/month** | Mostly Claude/GPT API for script generation |
+
+### Affiliate API Flag
+Amazon Associates and Flipkart both require application and approval. They want to see an active channel or website with existing traffic before granting API access. Apply now — approval takes 2-4 weeks. Pipeline will be ready before approvals come through if applications are submitted early.
+
+### Sequencing
+Do not start building until:
+1. Mr. Oldverdict hits 30 days consistent posting
+2. Google account restored and YouTube pipeline stable
+3. Instagram publish live for Mr. Oldverdict
+4. Character consistency (init_image_id) solved for Mr. Oldverdict
+
+Start affiliate API applications immediately — they run in parallel with the above.
+
+---
+
+## 27. LIP SYNC UPGRADE — MR. OLDVERDICT
+
+### What It Is
+Replace static character image with a talking avatar. Mr. Oldverdict's mouth moves in sync with his voice. More human. More watchable. Matches the character — stillness with just the mouth moving fits his personality perfectly.
+
+### Trigger
+Build this when channel hits 1000 subscribers or consistent daily views justify the cost. Not before.
+
+### Options
+
+| Option | Cost | Quality | API | Notes |
+|--------|------|---------|-----|-------|
+| D-ID | $5.90/month | Good | Yes | Best fit. Send image + audio, get lip-synced video back. Drop-in replacement. |
+| HeyGen | $29/month | Best | Yes | Highest quality but expensive for early stage. |
+| Hedra | ~$10/month | Good | Beta | Newer platform. Worth watching. |
+| Kling AI | Competitive | Very good | Yes | Chinese platform. Good quality. |
+| Wav2Lip | Free | Decent | Self-hosted | Open source. Needs GPU. Render free tier is CPU — would be very slow. |
+| SadTalker | Free | Better than Wav2Lip | Self-hosted | Open source. Better head movement. Same GPU problem. |
+
+### Recommended Path
+**D-ID at $5.90/month.** Clean API. CPU-friendly. Drop-in replacement for current image worker.
+
+### Pipeline Change
+Current: Image worker → generates still image → assembly uses as background
+After: Lip sync worker → sends reference image + audio to D-ID → receives video clip → assembly composites around it
+
+Reference image: Already locked. Script ID 94dee31e. Use this as D-ID source image.
+
+### Impact on WorthBuying
+Not applicable — WorthBuying shows no character faces.
+
+---
+
+## 28. TOPIC INGESTION EXPANSION
+
+### Current State
+Ingestion worker pulls only from Reddit. 5 subreddits mapped to 5 categories. Works for now. Becomes a problem after 60 days when topics start cycling.
+
+### Sources To Add
+| Source | Type | Category Fit | Effort |
+|--------|------|-------------|--------|
+| Google Trends | Trending searches | A, D | Low — free API |
+| X/Twitter trending | Real-time trends | A, B | Medium — API cost |
+| News headlines | BBC, Guardian, TOI English | A, B, C, D | Low — RSS feeds, free |
+| Quora | Most upvoted questions | A, C, D | Medium — scraping |
+| LinkedIn trending | Professional content | B | Medium — API limited |
+| YouTube comments | Viral Shorts comments | A, C | Medium — YouTube Data API |
+| Hacker News | Front page | B, D, E | Low — free API |
+| Product Hunt | New launches | E | Low — free API |
+
+### Priority Order
+1. Google Trends — free, easy, gives UK and Australia signal beyond Reddit's US skew
+2. News RSS feeds — free, zero API cost, broad coverage
+3. Hacker News — free API, good for Category B and E
+4. X/Twitter — useful but API now costs money. Do last.
+
+### When To Build
+After 60 days of posting or when topics queue drops below 20 unused topics consistently.
+
+---
+
+## 29. CHANNEL ROADMAP
+
+### Mr. Oldverdict
+| Milestone | Target | Action |
+|-----------|--------|--------|
+| First video live | ✅ March 1 2026 | Done |
+| 10 buffer videos | ✅ Done | Publish 2/day manually until pipeline takes over |
+| Instagram live | Next session | Build Graph API publish route |
+| 100 subscribers | Day 30-45 | Organic. No action needed. |
+| Lip sync upgrade | 1000 subscribers | Switch to D-ID |
+| 4 videos/day | When channel earns | Scale orchestration crons |
+
+### WorthBuying
+| Milestone | Target | Action |
+|-----------|--------|--------|
+| Affiliate applications | This week | Amazon Associates + Flipkart |
+| Build start | Day 30 of Mr. Oldverdict | After pipeline is stable |
+| First video | Day 60 | Pending affiliate approval |
+| Revenue start | Day 1 of posting | Affiliate commissions on every video |
