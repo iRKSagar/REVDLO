@@ -166,11 +166,10 @@ async function fetchHackerNews() {
     const idsRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
     if (!idsRes.ok) return [];
     const ids = await idsRes.json();
-    const top10 = ids.slice(0, 10);
 
-    // Fetch each story — limit to 6 to stay within subrequest budget
+    // Fetch each story — limit to 3 to stay within subrequest budget
     const stories = await Promise.all(
-      top10.slice(0, 6).map(async id => {
+      ids.slice(0, 3).map(async id => {
         try {
           const res = await fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`);
           if (!res.ok) return null;
@@ -203,26 +202,6 @@ async function fetchHackerNews() {
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 
-async function topicAlreadyExists(supabaseUrl, supabaseKey, title) {
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  try {
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/topics?raw_topic=ilike.*${encodeURIComponent(title.substring(0, 20))}*&created_at=gte.${sevenDaysAgo}&limit=1`,
-      {
-        headers: {
-          'apikey': supabaseKey,
-          'Authorization': `Bearer ${supabaseKey}`
-        }
-      }
-    );
-    if (!response.ok) return false;
-    const existing = await response.json();
-    return existing.length > 0;
-  } catch {
-    return false;
-  }
-}
-
 async function storeTopic(supabaseUrl, supabaseKey, topic) {
   const response = await fetch(`${supabaseUrl}/rest/v1/topics`, {
     method: 'POST',
@@ -250,7 +229,6 @@ async function runIngestion(env) {
     fetched: 0,
     passed_blacklist: 0,
     stored: 0,
-    skipped_duplicate: 0,
     by_source: { reddit: 0, google_trends: 0, news_rss: 0, hacker_news: 0 },
     categories: { A: 0, B: 0, C: 0, D: 0, E: 0 }
   };
@@ -311,16 +289,10 @@ async function runIngestion(env) {
       .slice(0, 5);
 
     for (const topic of top5) {
-      const isDuplicate = await topicAlreadyExists(env.SUPABASE_URL, env.SUPABASE_KEY, topic.title);
-      if (isDuplicate) {
-        results.skipped_duplicate++;
-        continue;
-      }
       const stored = await storeTopic(env.SUPABASE_URL, env.SUPABASE_KEY, topic);
       if (stored) {
         results.stored++;
         results.categories[category]++;
-        // Track by source
         if (topic.source.startsWith('reddit')) results.by_source.reddit++;
         else if (topic.source.startsWith('google')) results.by_source.google_trends++;
         else if (topic.source.includes('news')) results.by_source.news_rss++;
