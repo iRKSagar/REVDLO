@@ -1,5 +1,6 @@
 // Mr. Oldverdict Ingestion Worker
-// Sources: Reddit, Google Trends, BBC/Guardian News RSS, Hacker News
+// Pulls top posts from Reddit subreddits
+// Reduced to 2 subreddits per category to stay within Cloudflare free tier subrequest limits
 
 const SUBREDDITS = {
   A: ['mildlyinfuriating', 'firstworldproblems'],
@@ -9,21 +10,6 @@ const SUBREDDITS = {
   E: ['Stoicism', 'history']
 };
 
-// Google Trends RSS — geo codes for target audience
-const TRENDS_FEEDS = [
-  { url: 'https://trends.google.com/trending/rss?geo=US', category: 'A' },
-  { url: 'https://trends.google.com/trending/rss?geo=GB', category: 'A' },
-  { url: 'https://trends.google.com/trending/rss?geo=AU', category: 'D' }
-];
-
-// News RSS feeds — BBC and Guardian
-const NEWS_FEEDS = [
-  { url: 'https://feeds.bbci.co.uk/news/rss.xml', category: 'B' },
-  { url: 'https://feeds.bbci.co.uk/news/technology/rss.xml', category: 'B' },
-  { url: 'https://www.theguardian.com/society/rss', category: 'C' },
-  { url: 'https://www.theguardian.com/money/rss', category: 'E' }
-];
-
 const BLACKLIST_KEYWORDS = [
   'trump', 'biden', 'obama', 'modi', 'putin', 'xi', 'sunak', 'labour', 'republican', 'democrat',
   'conservative', 'liberal', 'maga', 'woke', 'israel', 'palestine', 'ukraine', 'russia', 'china',
@@ -31,8 +17,7 @@ const BLACKLIST_KEYWORDS = [
   'apple', 'google', 'microsoft', 'amazon', 'meta', 'facebook', 'instagram', 'tiktok', 'twitter', 'netflix',
   'elon', 'musk', 'bezos', 'zuckerberg', 'epstein', 'kardashian',
   'rape', 'suicide', 'murder', 'abuse', 'racist', 'nazi', 'genocide', 'terrorist',
-  'porn', 'sex', 'nsfw', 'nude', 'naked',
-  'death', 'killed', 'shooting', 'stabbing', 'attack', 'war', 'bombing'
+  'porn', 'sex', 'nsfw', 'nude', 'naked'
 ];
 
 function passesBlacklist(text) {
@@ -42,39 +27,11 @@ function passesBlacklist(text) {
 
 function cleanTitle(title) {
   return title
-    .replace(/<[^>]*>/g, '')         // strip HTML tags
-    .replace(/&amp;/g, '&')          // decode common HTML entities
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/[^\w\s.,?!'\-–]/g, '')
+    .replace(/[^\w\s.,?!'-]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .substring(0, 280);
 }
-
-// Extract <title> tags from RSS XML — no DOM parser needed
-function extractRSSItems(xml) {
-  const items = [];
-  const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
-  const titleRegex = /<title[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/title>|<title[^>]*>([\s\S]*?)<\/title>/i;
-
-  let itemMatch;
-  while ((itemMatch = itemRegex.exec(xml)) !== null) {
-    const itemXml = itemMatch[1];
-    const titleMatch = titleRegex.exec(itemXml);
-    if (titleMatch) {
-      const title = cleanTitle(titleMatch[1] || titleMatch[2] || '');
-      if (title.length > 20) {
-        items.push(title);
-      }
-    }
-  }
-  return items;
-}
-
-// ─── REDDIT ───────────────────────────────────────────────────────────────────
 
 async function fetchSubredditPosts(subreddit) {
   const url = `https://www.reddit.com/r/${subreddit}/hot.json?limit=5&t=day`;
@@ -91,116 +48,37 @@ async function fetchSubredditPosts(subreddit) {
         title: cleanTitle(post.data.title),
         score: post.data.score,
         comments: post.data.num_comments,
-        subreddit: post.data.subreddit,
-        source: `reddit/r/${post.data.subreddit}`
+        subreddit: post.data.subreddit
       }))
       .filter(post => post.title.length > 20);
-  } catch {
+  } catch (error) {
     return [];
   }
 }
 
-function calculateEngagementScore(score, comments) {
-  return score + (comments * 3);
+function calculateEngagementScore(post) {
+  return post.score + (post.comments * 3);
 }
 
-// ─── GOOGLE TRENDS ────────────────────────────────────────────────────────────
-
-async function fetchGoogleTrends(feedUrl, category) {
+async function topicAlreadyExists(supabaseUrl, supabaseKey, title) {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   try {
-    const response = await fetch(feedUrl, {
-      headers: { 'User-Agent': 'MrOldverdict-Bot/1.0' }
-    });
-    if (!response.ok) return [];
-    const xml = await response.text();
-    const titles = extractRSSItems(xml);
-    return titles
-      .filter(passesBlacklist)
-      .slice(0, 5)
-      .map(title => ({
-        title,
-        category,
-        source: `google_trends/${feedUrl.includes('geo=US') ? 'US' : feedUrl.includes('geo=GB') ? 'GB' : 'AU'}`,
-        engagementScore: 500  // Fixed mid-range score for trends
-      }));
-  } catch {
-    return [];
-  }
-}
-
-// ─── NEWS RSS ─────────────────────────────────────────────────────────────────
-
-async function fetchNewsRSS(feedUrl, category) {
-  try {
-    const response = await fetch(feedUrl, {
-      headers: { 'User-Agent': 'MrOldverdict-Bot/1.0' }
-    });
-    if (!response.ok) return [];
-    const xml = await response.text();
-    const titles = extractRSSItems(xml);
-
-    // Filter out pure news headlines — keep behavior/trend focused ones
-    // News titles with these words are too event-specific, not behavior topics
-    const tooNewsyWords = ['killed', 'dies', 'arrest', 'court', 'trial', 'election', 'vote', 'minister', 'president', 'mp ', ' mp,'];
-    const filtered = titles.filter(t => {
-      const lower = t.toLowerCase();
-      return passesBlacklist(t) && !tooNewsyWords.some(w => lower.includes(w));
-    });
-
-    return filtered.slice(0, 3).map(title => ({
-      title,
-      category,
-      source: feedUrl.includes('bbc') ? 'bbc_news' : 'guardian_news',
-      engagementScore: 400
-    }));
-  } catch {
-    return [];
-  }
-}
-
-// ─── HACKER NEWS ──────────────────────────────────────────────────────────────
-
-async function fetchHackerNews() {
-  try {
-    // Get top story IDs
-    const idsRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
-    if (!idsRes.ok) return [];
-    const ids = await idsRes.json();
-
-    // Fetch each story — limit to 3 to stay within subrequest budget
-    const stories = await Promise.all(
-      ids.slice(0, 3).map(async id => {
-        try {
-          const res = await fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`);
-          if (!res.ok) return null;
-          const item = await res.json();
-          if (!item || item.type !== 'story' || !item.title) return null;
-          return {
-            title: cleanTitle(item.title),
-            score: item.score || 0,
-            comments: item.descendants || 0,
-            source: 'hacker_news'
-          };
-        } catch {
-          return null;
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/topics?raw_topic=ilike.*${encodeURIComponent(title.substring(0, 20))}*&created_at=gte.${sevenDaysAgo}&limit=1`,
+      {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`
         }
-      })
+      }
     );
-
-    return stories
-      .filter(s => s && s.title.length > 20 && passesBlacklist(s.title))
-      .map(s => ({
-        title: s.title,
-        category: s.title.toLowerCase().includes('work') || s.title.toLowerCase().includes('job') || s.title.toLowerCase().includes('company') ? 'B' : 'E',
-        source: 'hacker_news',
-        engagementScore: calculateEngagementScore(s.score, s.comments)
-      }));
+    if (!response.ok) return false;
+    const existing = await response.json();
+    return existing.length > 0;
   } catch {
-    return [];
+    return false;
   }
 }
-
-// ─── SUPABASE ─────────────────────────────────────────────────────────────────
 
 async function storeTopic(supabaseUrl, supabaseKey, topic) {
   const response = await fetch(`${supabaseUrl}/rest/v1/topics`, {
@@ -214,7 +92,7 @@ async function storeTopic(supabaseUrl, supabaseKey, topic) {
     body: JSON.stringify({
       raw_topic: topic.title,
       category: topic.category,
-      source: topic.source,
+      source: `reddit/r/${topic.subreddit}`,
       engagement_score: topic.engagementScore,
       blacklist_cleared: true
     })
@@ -222,89 +100,53 @@ async function storeTopic(supabaseUrl, supabaseKey, topic) {
   return response.ok;
 }
 
-// ─── MAIN INGESTION ───────────────────────────────────────────────────────────
-
 async function runIngestion(env) {
   const results = {
     fetched: 0,
     passed_blacklist: 0,
     stored: 0,
-    by_source: { reddit: 0, google_trends: 0, news_rss: 0, hacker_news: 0 },
+    skipped_duplicate: 0,
     categories: { A: 0, B: 0, C: 0, D: 0, E: 0 }
   };
 
-  const allTopics = [];
-
-  // 1. Reddit
   for (const [category, subreddits] of Object.entries(SUBREDDITS)) {
+    const categoryPosts = [];
+
     for (const subreddit of subreddits) {
       const posts = await fetchSubredditPosts(subreddit);
       results.fetched += posts.length;
+
       for (const post of posts) {
         if (!passesBlacklist(post.title)) continue;
         results.passed_blacklist++;
-        allTopics.push({
-          title: post.title,
+        categoryPosts.push({
+          ...post,
           category,
-          source: post.source,
-          engagementScore: calculateEngagementScore(post.score, post.comments)
+          engagementScore: calculateEngagementScore(post)
         });
       }
     }
-  }
 
-  // 2. Google Trends
-  for (const feed of TRENDS_FEEDS) {
-    const topics = await fetchGoogleTrends(feed.url, feed.category);
-    results.fetched += topics.length;
-    results.passed_blacklist += topics.length;
-    allTopics.push(...topics);
-  }
-
-  // 3. News RSS
-  for (const feed of NEWS_FEEDS) {
-    const topics = await fetchNewsRSS(feed.url, feed.category);
-    results.fetched += topics.length;
-    results.passed_blacklist += topics.length;
-    allTopics.push(...topics);
-  }
-
-  // 4. Hacker News
-  const hnTopics = await fetchHackerNews();
-  results.fetched += hnTopics.length;
-  results.passed_blacklist += hnTopics.length;
-  allTopics.push(...hnTopics);
-
-  // Store top topics — deduplicate and store best per category
-  const byCategory = { A: [], B: [], C: [], D: [], E: [] };
-  for (const topic of allTopics) {
-    if (byCategory[topic.category]) {
-      byCategory[topic.category].push(topic);
-    }
-  }
-
-  for (const [category, topics] of Object.entries(byCategory)) {
-    const top5 = topics
+    const top3 = categoryPosts
       .sort((a, b) => b.engagementScore - a.engagementScore)
-      .slice(0, 5);
+      .slice(0, 3);
 
-    for (const topic of top5) {
-      const stored = await storeTopic(env.SUPABASE_URL, env.SUPABASE_KEY, topic);
+    for (const post of top3) {
+      const isDuplicate = await topicAlreadyExists(env.SUPABASE_URL, env.SUPABASE_KEY, post.title);
+      if (isDuplicate) {
+        results.skipped_duplicate++;
+        continue;
+      }
+      const stored = await storeTopic(env.SUPABASE_URL, env.SUPABASE_KEY, post);
       if (stored) {
         results.stored++;
         results.categories[category]++;
-        if (topic.source.startsWith('reddit')) results.by_source.reddit++;
-        else if (topic.source.startsWith('google')) results.by_source.google_trends++;
-        else if (topic.source.includes('news')) results.by_source.news_rss++;
-        else if (topic.source === 'hacker_news') results.by_source.hacker_news++;
       }
     }
   }
 
   return results;
 }
-
-// ─── HANDLERS ─────────────────────────────────────────────────────────────────
 
 export default {
   async fetch(request, env) {
