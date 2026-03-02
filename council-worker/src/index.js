@@ -124,6 +124,8 @@ Setup: "The average out of office reply is now longer than most work emails."
 
 The setup line must be plain enough that anyone from any market understands it immediately. No jargon. No cultural references. Just the fact of the modern behavior.
 
+Avoid starting the setup line with "People are" or "Many people" more than occasionally. Name the specific actor instead — professionals, couples, managers, parents, employees, companies — or state the behavior as a plain fact. Specific actors make stronger titles and stronger setup cards. "People are" is a fallback, not a default. Use it sparingly.
+
 OUTPUT FORMAT - return valid JSON only, no markdown, no extra text
 {
   "setup": "One plain dry sentence describing the modern behavior. No humor. No judgment. Just the fact.",
@@ -143,7 +145,8 @@ const BLACKLIST_KEYWORDS = [
   'conservative', 'liberal', 'maga', 'woke', 'israel', 'palestine', 'ukraine', 'russia', 'china',
   'christian', 'muslim', 'islam', 'hindu', 'jewish', 'bible', 'quran', 'torah',
   'apple', 'google', 'microsoft', 'amazon', 'meta', 'facebook', 'instagram', 'tiktok', 'twitter', 'netflix',
-  'elon', 'musk', 'bezos', 'zuckerberg', 'epstein', 'kardashian'
+  'elon', 'musk', 'bezos', 'zuckerberg', 'epstein', 'kardashian',
+  'gen z', 'genz', 'generation z', 'zoomer'
 ];
 
 function passesBlacklist(text) {
@@ -152,8 +155,6 @@ function passesBlacklist(text) {
 }
 
 async function fetchRecentScripts(supabaseUrl, supabaseKey, themeTags) {
-  // Fetch scripts from the last 180 days that share theme tags
-  // This is the Council's memory recall
   const response = await fetch(
     `${supabaseUrl}/rest/v1/scripts?theme_tags=cs.{${themeTags.join(',')}}&order=created_at.desc&limit=5`,
     {
@@ -169,7 +170,6 @@ async function fetchRecentScripts(supabaseUrl, supabaseKey, themeTags) {
 }
 
 async function generateScript(openaiKey, topic, category, relatedScripts) {
-  // Build context from related scripts for memory connection
   let memoryContext = '';
   if (relatedScripts.length > 0) {
     memoryContext = `\n\nMEMORY RECALL - Mr. Oldverdict has spoken about related topics before. Consider weaving a connection if it earns a stronger line. Do not force it.\n`;
@@ -213,14 +213,11 @@ async function generateScript(openaiKey, topic, category, relatedScripts) {
 
   const data = await response.json();
   const raw = data.choices[0].message.content.trim();
-
-  // Strip any accidental markdown code blocks
   const cleaned = raw.replace(/```json|```/g, '').trim();
   return JSON.parse(cleaned);
 }
 
 async function storeScript(supabaseUrl, supabaseKey, topicId, category, rawTopic, script, relatedScripts) {
-  // Store the completed script in Supabase
   const response = await fetch(`${supabaseUrl}/rest/v1/scripts`, {
     method: 'POST',
     headers: {
@@ -246,7 +243,6 @@ async function storeScript(supabaseUrl, supabaseKey, topicId, category, rawTopic
   const stored = await response.json();
   const newScriptId = stored[0].id;
 
-  // Store memory connections if related scripts were used
   if (relatedScripts.length > 0) {
     const connections = relatedScripts.map(rs => ({
       new_script_id: newScriptId,
@@ -265,24 +261,123 @@ async function storeScript(supabaseUrl, supabaseKey, topicId, category, rawTopic
     });
   }
 
-  // Mark topic as used
-  await fetch(`${supabaseUrl}/rest/v1/topics?id=eq.${topicId}`, {
-    method: 'PATCH',
-    headers: {
-      'apikey': supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ used: true })
-  });
+  if (topicId) {
+    await fetch(`${supabaseUrl}/rest/v1/topics?id=eq.${topicId}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ used: true })
+    });
+  }
 
   return stored[0];
 }
 
 async function getNextTopic(supabaseUrl, supabaseKey) {
-  // Get the highest engagement unused topic that cleared the blacklist
-  // Rotate categories so no two consecutive videos share the same category
-  const response = await fetch(
+  // Step 1: Get last 8 published scripts to check streak and wildcard cycle
+  const recentRes = await fetch(
+    `${supabaseUrl}/rest/v1/scripts?published=eq.true&order=published_at.desc&limit=8&select=category`,
+    {
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`
+      }
+    }
+  );
+
+  let recentCategories = [];
+  if (recentRes.ok) {
+    const recent = await recentRes.json();
+    recentCategories = recent.map(s => s.category);
+  }
+
+  // Step 2: Check wildcard — every 8th published video forces Category E
+  const totalRes = await fetch(
+    `${supabaseUrl}/rest/v1/scripts?published=eq.true&select=id`,
+    {
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Prefer': 'count=exact',
+        'Range': '0-0'
+      }
+    }
+  );
+
+  let totalPublished = 0;
+  if (totalRes.ok) {
+    const countHeader = totalRes.headers.get('Content-Range');
+    if (countHeader) {
+      totalPublished = parseInt(countHeader.split('/')[1]) || 0;
+    }
+  }
+
+  const isWildcard = totalPublished > 0 && (totalPublished + 1) % 8 === 0;
+
+  if (isWildcard) {
+    const wildcardRes = await fetch(
+      `${supabaseUrl}/rest/v1/topics?used=eq.false&blacklist_cleared=eq.true&category=eq.E&order=engagement_score.desc&limit=1`,
+      {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`
+        }
+      }
+    );
+    if (wildcardRes.ok) {
+      const wildcardTopics = await wildcardRes.json();
+      if (wildcardTopics.length > 0) return wildcardTopics[0];
+    }
+    // No Category E topics available — fall through to normal logic
+  }
+
+  // Step 3: Check streak — if last 3 are same category, force rotation
+  const last3 = recentCategories.slice(0, 3);
+  const streakCategory = last3.length === 3 && last3.every(c => c === last3[0]) ? last3[0] : null;
+
+  if (streakCategory) {
+    const rotateRes = await fetch(
+      `${supabaseUrl}/rest/v1/topics?used=eq.false&blacklist_cleared=eq.true&category=neq.${streakCategory}&order=engagement_score.desc&limit=1`,
+      {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`
+        }
+      }
+    );
+    if (rotateRes.ok) {
+      const rotateTopics = await rotateRes.json();
+      if (rotateTopics.length > 0) return rotateTopics[0];
+    }
+    // No other category topics — fall through
+  }
+
+  // Step 4: Streak building — if last 2 are same category, continue it
+  const last2 = recentCategories.slice(0, 2);
+  const streakBuilding = last2.length === 2 && last2[0] === last2[1];
+
+  if (streakBuilding) {
+    const continueRes = await fetch(
+      `${supabaseUrl}/rest/v1/topics?used=eq.false&blacklist_cleared=eq.true&category=eq.${last2[0]}&order=engagement_score.desc&limit=1`,
+      {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`
+        }
+      }
+    );
+    if (continueRes.ok) {
+      const continueTopics = await continueRes.json();
+      if (continueTopics.length > 0) return continueTopics[0];
+    }
+    // No more topics in this category — fall through
+  }
+
+  // Step 5: Default — highest scoring unused topic across all categories
+  const defaultRes = await fetch(
     `${supabaseUrl}/rest/v1/topics?used=eq.false&blacklist_cleared=eq.true&order=engagement_score.desc&limit=1`,
     {
       headers: {
@@ -291,14 +386,13 @@ async function getNextTopic(supabaseUrl, supabaseKey) {
       }
     }
   );
-  if (!response.ok) return null;
-  const topics = await response.json();
-  return topics.length > 0 ? topics[0] : null;
+  if (!defaultRes.ok) return null;
+  const defaultTopics = await defaultRes.json();
+  return defaultTopics.length > 0 ? defaultTopics[0] : null;
 }
 
 export default {
   async fetch(request, env) {
-    // Health check
     if (request.method === 'GET') {
       return new Response(JSON.stringify({ status: 'Mr. Oldverdict is watching.' }), {
         headers: { 'Content-Type': 'application/json' }
@@ -309,7 +403,6 @@ export default {
       return new Response('Method not allowed', { status: 405 });
     }
 
-    // Auth check
     const authHeader = request.headers.get('Authorization');
     if (authHeader !== `Bearer ${env.COUNCIL_SECRET}`) {
       return new Response('Unauthorized', { status: 401 });
@@ -318,7 +411,6 @@ export default {
     try {
       const body = await request.json();
 
-      // Allow manual topic injection or pull from Supabase
       let topicId, rawTopic, category;
 
       if (body.raw_topic && body.category) {
@@ -327,10 +419,10 @@ export default {
         category = body.category;
         topicId = body.topic_id || null;
       } else {
-        // Auto pull from ingestion queue
+        // Auto pull from ingestion queue with streak logic
         const topic = await getNextTopic(env.SUPABASE_URL, env.SUPABASE_KEY);
         if (!topic) {
-          // Failover to Category E
+          // Fallback to Category E proverb
           rawTopic = 'What mattered then has no value now. What had no value then matters now.';
           category = 'E';
           topicId = null;
@@ -341,7 +433,6 @@ export default {
         }
       }
 
-      // Blacklist check
       if (!passesBlacklist(rawTopic)) {
         return new Response(JSON.stringify({
           error: 'Topic did not pass blacklist filter.',
@@ -349,19 +440,15 @@ export default {
         }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
 
-      // Memory recall - find related scripts
       const preliminaryTags = rawTopic.toLowerCase().split(' ').filter(w => w.length > 4).slice(0, 3);
       const relatedScripts = await fetchRecentScripts(env.SUPABASE_URL, env.SUPABASE_KEY, preliminaryTags);
 
-      // Generate script through the Council
       const script = await generateScript(env.OPENAI_API_KEY, rawTopic, category, relatedScripts);
 
-      // Ensure setup is always populated
       if (!script.setup) {
         script.setup = `In 2025, ${rawTopic.toLowerCase()}.`;
       }
 
-      // Store script and connections in Supabase
       const stored = await storeScript(
         env.SUPABASE_URL,
         env.SUPABASE_KEY,
@@ -393,7 +480,6 @@ export default {
     }
   },
 
-  // Scheduled trigger - runs twice daily at 11 AM and 8 PM UTC
   async scheduled(event, env, ctx) {
     ctx.waitUntil(
       fetch(`https://${env.WORKER_DOMAIN}/`, {
