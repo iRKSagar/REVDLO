@@ -56,7 +56,7 @@ function applyKeywordScoring(title, baseScore) {
   return Math.round(score);
 }
 
-
+function passesBlacklist(text) {
   const lower = text.toLowerCase();
   return !BLACKLIST_KEYWORDS.some(word => lower.includes(word));
 }
