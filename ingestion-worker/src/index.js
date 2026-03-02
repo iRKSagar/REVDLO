@@ -107,17 +107,29 @@ async function fetchReddit(subreddit, category) {
 }
 
 async function fetchGoogleTrends() {
-  try {
-    const res = await fetch('https://trends.google.com/trending/rss?geo=US', {
-      headers: { 'User-Agent': 'MrOldverdict-Bot/1.0' }
-    });
-    if (!res.ok) return [];
-    const xml = await res.text();
-    return extractRSSItems(xml)
-      .filter(passesBlacklist)
-      .slice(0, 3)
-      .map(title => ({ title, category: 'A', source: 'google_trends_US', engagementScore: applyKeywordScoring(title, 500) }));
-  } catch { return []; }
+  // US, GB, IN — global English speaking markets including India
+  const feeds = [
+    { url: 'https://trends.google.com/trending/rss?geo=US', category: 'A', source: 'google_trends_US' },
+    { url: 'https://trends.google.com/trending/rss?geo=GB', category: 'A', source: 'google_trends_GB' },
+    { url: 'https://trends.google.com/trending/rss?geo=IN', category: 'B', source: 'google_trends_IN' }
+  ];
+
+  const results = [];
+  for (const feed of feeds) {
+    try {
+      const res = await fetch(feed.url, {
+        headers: { 'User-Agent': 'MrOldverdict-Bot/1.0' }
+      });
+      if (!res.ok) continue;
+      const xml = await res.text();
+      const topics = extractRSSItems(xml)
+        .filter(passesBlacklist)
+        .slice(0, 3)
+        .map(title => ({ title, category: feed.category, source: feed.source, engagementScore: applyKeywordScoring(title, 500) }));
+      results.push(...topics);
+    } catch { continue; }
+  }
+  return results;
 }
 
 async function fetchHackerNews() {
