@@ -3,6 +3,8 @@ if not hasattr(PIL.Image, "ANTIALIAS"):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
 
 import os
+import re
+import time
 import requests
 import tempfile
 import json
@@ -29,11 +31,18 @@ YT_CLIENT_ID = os.environ.get('YT_CLIENT_ID')
 YT_CLIENT_SECRET = os.environ.get('YT_CLIENT_SECRET')
 YT_REFRESH_TOKEN = os.environ.get('YT_REFRESH_TOKEN')
 
+IG_ACCESS_TOKEN = os.environ.get('IG_ACCESS_TOKEN')
+IG_ACCOUNT_ID = os.environ.get('IG_ACCOUNT_ID')
+
+INSTAGRAM_HASHTAGS = '#mroldverdict #shorts #comedy #wisdom #observations'
+
 
 def check_auth(req):
     auth = req.headers.get('Authorization', '')
     return auth == f'Bearer {COUNCIL_SECRET}'
 
+
+# ─── YouTube helpers ───────────────────────────────────────────────────────────
 
 def get_youtube_access_token():
     """Exchange refresh token for a fresh access token."""
@@ -53,13 +62,12 @@ def upload_to_youtube(video_path, title, description, tags):
     print(f'[Publish] Access token obtained: {access_token[:20]}...')
     print(f'[Publish] YT_CLIENT_ID set: {bool(YT_CLIENT_ID)}, YT_CLIENT_SECRET set: {bool(YT_CLIENT_SECRET)}, YT_REFRESH_TOKEN set: {bool(YT_REFRESH_TOKEN)}')
 
-    # Step 1: Initialize resumable upload
     metadata = {
         'snippet': {
             'title': title[:100],
             'description': description,
             'tags': tags,
-            'categoryId': '22'  # People & Blogs
+            'categoryId': '22'
         },
         'status': {
             'privacyStatus': 'public',
@@ -82,7 +90,6 @@ def upload_to_youtube(video_path, title, description, tags):
     init_res.raise_for_status()
     upload_url = init_res.headers['Location']
 
-    # Step 2: Upload video bytes
     with open(video_path, 'rb') as f:
         video_data = f.read()
 
@@ -125,38 +132,31 @@ def publish_to_youtube_job(script_id):
     try:
         print(f'[Publish] Starting YouTube publish for script {script_id}')
 
-        # Get video record
         video_record = get_video_record(script_id)
         video_url = video_record.get('video_url')
         if not video_url:
             print(f'[Publish] No video_url found for script {script_id}')
             return
 
-        # Get script for title and lines
         script = get_script(script_id)
         setup = script.get('setup', 'Mr. Oldverdict')
         lines = script.get('lines', [])
         if isinstance(lines, str):
             lines = json.loads(lines)
 
-        # Build YouTube title and description
         title = setup[:93] + ' #Shorts'
         line1 = strip_emotion_tags(lines[0]['text']) if lines else ''
         line2 = lines[1]['text'] if len(lines) > 1 else ''
         description = f'{line1}\n\n{line2}\n\n#mroldverdict #Shorts #comedy #wisdom #observations'
-
         tags = ['mroldverdict', 'shorts', 'comedy', 'wisdom', 'observations', 'oldverdict']
 
-        # Download video
         print(f'[Publish] Downloading video from Supabase...')
         video_path = download_file(video_url, '.mp4')
 
-        # Upload to YouTube
         print(f'[Publish] Uploading to YouTube...')
         yt_id = upload_to_youtube(video_path, title, description, tags)
         print(f'[Publish] YouTube video ID: {yt_id}')
 
-        # Mark published
         mark_script_published(script_id, yt_id)
         print(f'[Publish] Done. https://youtube.com/shorts/{yt_id}')
 
@@ -172,6 +172,153 @@ def publish_to_youtube_job(script_id):
             except Exception:
                 pass
 
+
+# ─── Instagram helpers ─────────────────────────────────────────────────────────
+
+def build_instagram_caption(script_row):
+    """
+    Returns the second line of the script stripped of its emotion tag,
+    followed by the standard hashtag block.
+    Falls back to setup text if there is no second line.
+    """
+    lines = script_row.get('lines', [])
+    if isinstance(lines, str):
+        lines = json.loads(lines)
+
+    if len(lines) >= 2:
+        raw = lines[1].get('text', '')
+    else:
+        raw = script_row.get('setup', '')
+
+    clean = re.sub(r'^\[[^\]]+\]\s*', '', raw).strip()
+    return f'{clean}\n\n{INSTAGRAM_HASHTAGS}'
+
+
+def publish_reel_to_instagram(video_public_url, caption):
+    """
+    Two-step Instagram Graph API publish.
+    Step 1: Create a container.
+    Step 2: Poll until FINISHED, then publish.
+    Returns the published media ID on success, raises on failure.
+    """
+    if not IG_ACCESS_TOKEN or not IG_ACCOUNT_ID:
+        raise ValueError('IG_ACCESS_TOKEN or IG_ACCOUNT_ID not set in environment')
+
+    base = f'https://graph.facebook.com/v19.0/{IG_ACCOUNT_ID}'
+
+    # Step 1: Create container
+    container_resp = requests.post(
+        f'{base}/media',
+        data={
+            'media_type': 'REELS',
+            'video_url': video_public_url,
+            'caption': caption,
+            'share_to_feed': 'true',
+            'access_token': IG_ACCESS_TOKEN,
+        },
+        timeout=60,
+    )
+    container_data = container_resp.json()
+
+    if 'id' not in container_data:
+        raise RuntimeError(f'Container creation failed: {container_data}')
+
+    creation_id = container_data['id']
+    print(f'[Instagram] Container created: {creation_id}')
+
+    # Step 2: Poll until FINISHED (max 5 minutes)
+    for attempt in range(30):
+        time.sleep(10)
+        status_resp = requests.get(
+            f'https://graph.facebook.com/v19.0/{creation_id}',
+            params={
+                'fields': 'status_code',
+                'access_token': IG_ACCESS_TOKEN,
+            },
+            timeout=30,
+        )
+        status_data = status_resp.json()
+        status_code = status_data.get('status_code', '')
+        print(f'[Instagram] Container status ({attempt + 1}/30): {status_code}')
+
+        if status_code == 'FINISHED':
+            break
+        if status_code == 'ERROR':
+            raise RuntimeError(f'Container processing error: {status_data}')
+    else:
+        raise RuntimeError('Container did not finish processing within 5 minutes')
+
+    # Step 3: Publish
+    publish_resp = requests.post(
+        f'{base}/media_publish',
+        data={
+            'creation_id': creation_id,
+            'access_token': IG_ACCESS_TOKEN,
+        },
+        timeout=60,
+    )
+    publish_data = publish_resp.json()
+
+    if 'id' not in publish_data:
+        raise RuntimeError(f'Publish failed: {publish_data}')
+
+    media_id = publish_data['id']
+    print(f'[Instagram] Published Reel: {media_id}')
+    return media_id
+
+
+def mark_script_instagram_published(script_id, instagram_media_id):
+    """Store Instagram media ID on the script row in Supabase."""
+    requests.patch(
+        f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id}',
+        headers={
+            'apikey': SUPABASE_KEY,
+            'Authorization': f'Bearer {SUPABASE_KEY}',
+            'Content-Type': 'application/json'
+        },
+        json={'instagram_media_id': instagram_media_id}
+    )
+
+
+def publish_to_instagram_job(script_id):
+    """
+    Fetch assembled video + script from Supabase and publish as an Instagram Reel.
+    Designed to be called both from run_pipeline_job and from /publish-instagram route.
+    """
+    video_path = None
+    try:
+        print(f'[Instagram] Starting publish for script {script_id}')
+
+        video_record = get_video_record(script_id)
+        video_url = video_record.get('video_url')
+        if not video_url:
+            print(f'[Instagram] No video_url for script {script_id}')
+            return None
+
+        script = get_script(script_id)
+        caption = build_instagram_caption(script)
+        print(f'[Instagram] Caption: {caption[:80]}...')
+
+        media_id = publish_reel_to_instagram(video_url, caption)
+        mark_script_instagram_published(script_id, media_id)
+        print(f'[Instagram] Done. Media ID: {media_id}')
+        return media_id
+
+    except Exception as e:
+        import traceback
+        print(f'[Instagram] Error: {e}')
+        print(traceback.format_exc())
+        return None
+
+    finally:
+        if video_path and os.path.exists(video_path):
+            try:
+                os.unlink(video_path)
+            except Exception:
+                pass
+
+
+# ─── Shared helpers ────────────────────────────────────────────────────────────
 
 def download_file(url, suffix):
     response = requests.get(url, timeout=30)
@@ -216,7 +363,6 @@ def get_script(script_id):
 
 def strip_emotion_tags(text):
     """Remove emotion tags like [clears throat] [laughing] from caption text."""
-    import re
     return re.sub(r'\[.*?\]', '', text).strip()
 
 
@@ -637,6 +783,8 @@ def run_pipeline_job():
     2. Call voice + image simultaneously
     3. Poll until both are ready
     4. Assemble video
+    5. Publish to YouTube
+    6. Publish to Instagram
     """
     print('[Pipeline] Starting automated pipeline run...')
 
@@ -649,7 +797,7 @@ def run_pipeline_job():
     logo_path = None
 
     try:
-        # Step 1: Council - auto-select topic (empty body)
+        # Step 1: Council
         print('[Pipeline] Step 1: Calling council worker...')
         council_res = requests.post(
             COUNCIL_URL,
@@ -704,10 +852,9 @@ def run_pipeline_job():
                 label, status, body = future.result()
                 print(f'[Pipeline] {label} worker: {status} - {body[:200]}')
 
-        # Step 3: Poll videos table until both voice_file_url and image_url are populated
+        # Step 3: Poll for completion
         print('[Pipeline] Step 3: Polling for voice and image completion...')
-        import time
-        max_wait = 300  # 5 minutes
+        max_wait = 300
         poll_interval = 10
         elapsed = 0
         voice_ready = False
@@ -790,7 +937,19 @@ def run_pipeline_job():
             print('[Pipeline] Step 5: Publishing to YouTube...')
             publish_to_youtube_job(script_id)
         else:
-            print('[Pipeline] YouTube credentials not set. Skipping publish.')
+            print('[Pipeline] YouTube credentials not set. Skipping YouTube publish.')
+
+        # Step 6: Publish to Instagram
+        if IG_ACCESS_TOKEN and IG_ACCOUNT_ID:
+            print('[Pipeline] Step 6: Publishing to Instagram...')
+            ig_media_id = publish_to_instagram_job(script_id)
+            if ig_media_id:
+                print(f'[Pipeline] Instagram published: {ig_media_id}')
+            else:
+                print('[Pipeline] Instagram publish returned no media ID (check logs above).')
+        else:
+            print('[Pipeline] Instagram credentials not set. Skipping Instagram publish.')
+
     except Exception as e:
         import traceback
         print(f'[Pipeline] Error: {e}')
@@ -805,6 +964,8 @@ def run_pipeline_job():
                     pass
 
 
+# ─── Routes ────────────────────────────────────────────────────────────────────
+
 @app.route('/', methods=['GET'])
 def health():
     return jsonify({'status': 'Assembly service standing by.'})
@@ -815,13 +976,12 @@ def run_pipeline():
     if not check_auth(request):
         return jsonify({'error': 'Unauthorized'}), 401
 
-    # Fire pipeline in background thread - return 202 immediately
     thread = threading.Thread(target=run_pipeline_job, daemon=True)
     thread.start()
 
     return jsonify({
         'status': 'Pipeline started',
-        'message': 'Council → Voice + Image → Assembly running in background'
+        'message': 'Council → Voice + Image → Assembly → YouTube → Instagram running in background'
     }), 202
 
 
@@ -836,13 +996,42 @@ def publish():
     if not script_id:
         return jsonify({'error': 'script_id is required'}), 400
 
-    # Run synchronously — Render can hold the connection
     publish_to_youtube_job(script_id)
 
     return jsonify({
         'status': 'Publish complete',
         'script_id': script_id
     }), 200
+
+
+@app.route('/publish-instagram', methods=['POST'])
+def publish_instagram():
+    if not check_auth(request):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    data = request.get_json() or {}
+    script_id = data.get('script_id')
+
+    if not script_id:
+        return jsonify({'error': 'script_id is required'}), 400
+
+    if not IG_ACCESS_TOKEN or not IG_ACCOUNT_ID:
+        return jsonify({'error': 'IG_ACCESS_TOKEN or IG_ACCOUNT_ID not set in Render environment'}), 500
+
+    media_id = publish_to_instagram_job(script_id)
+
+    if media_id:
+        return jsonify({
+            'success': True,
+            'media_id': media_id,
+            'script_id': script_id
+        }), 200
+    else:
+        return jsonify({
+            'success': False,
+            'error': 'Instagram publish failed — check Render logs',
+            'script_id': script_id
+        }), 500
 
 
 @app.route('/assemble', methods=['POST'])
