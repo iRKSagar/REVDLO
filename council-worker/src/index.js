@@ -36,7 +36,7 @@ Wrong second: "But sure, pay someone to explain sleep." - this explains the joke
 
 Example of right second line for setup "People are paying coaches to help them decide what to eat for breakfast":
 First: "I simply asked the chicken what it was in the mood for."
-Right second: "The coach charges two hundred. The egg was free." - closes the loop on the setup, specific price, lands harder.
+Right second: "The coach charges by the hour. The egg was free." - closes the loop on the setup, lands harder without naming a price.
 
 Example of right second line for setup "Couples are now using AI to write their wedding vows":
 First: "[exhales] Love, honor, and algorithms."
@@ -125,6 +125,8 @@ Setup: "The average out of office reply is now longer than most work emails."
 The setup line must be plain enough that anyone from any market understands it immediately. No jargon. No cultural references. Just the fact of the modern behavior.
 
 Avoid starting the setup line with "People are" or "Many people" more than occasionally. Name the specific actor instead — professionals, couples, managers, parents, employees, companies — or state the behavior as a plain fact. Specific actors make stronger titles and stronger setup cards. "People are" is a fallback, not a default. Use it sparingly.
+
+Never use specific currency amounts or currency names — no dollars, pounds, rupees, euros, numbers with currency. If a price or cost needs to land, use vague quantities — "by the hour", "costs extra", "not cheap", "the invoice was long" — or contrast with something that was free. The audience is global. Currency is local.
 
 OUTPUT FORMAT - return valid JSON only, no markdown, no extra text
 {
