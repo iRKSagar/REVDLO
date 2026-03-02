@@ -77,7 +77,7 @@ Must close the loop on the setup. Must stand next to the setup and feel inevitab
 ### Blacklist (never touch by name)
 Political parties, leaders, specific countries, specific ideologies, named religions, named religious practices, named brands, named companies, named platforms, living persons, recently deceased persons, celebrities, influencers, athletes, business leaders.
 
-Blacklist keywords in code: trump, biden, obama, modi, putin, xi, sunak, labour, republican, democrat, conservative, liberal, maga, woke, israel, palestine, ukraine, russia, china, christian, muslim, islam, hindu, jewish, bible, quran, torah, apple, google, microsoft, amazon, meta, facebook, instagram, tiktok, twitter, netflix, elon, musk, bezos, zuckerberg, epstein, kardashian
+Blacklist keywords in code: trump, biden, obama, modi, putin, xi, sunak, labour, republican, democrat, conservative, liberal, maga, woke, israel, palestine, ukraine, russia, china, christian, muslim, islam, hindu, jewish, bible, quran, torah, apple, google, microsoft, amazon, meta, facebook, instagram, tiktok, twitter, netflix, elon, musk, bezos, zuckerberg, epstein, kardashian, gen z, genz, generation z, zoomer
 
 ---
 
@@ -161,6 +161,8 @@ Total duration: ~22 seconds at 2 videos per day. Observed range: 20–23 seconds
 
 Note: Cloudflare free tier allows 5 cron triggers maximum. All 5 now used (ingestion + 2 orchestration + 2 council removed).
 Orchestration Git build deploy command: `npx wrangler deploy --config wrangler.orchestration.toml`
+
+**DONE — Cron cleanup complete:** Council and ingestion worker crons removed. All scheduling handled by orchestration worker. Confirmed working — 3rd video auto-published to YouTube without manual intervention.
 
 ### Assembly Service (Render)
 - URL: https://revdlo.onrender.com
@@ -361,6 +363,20 @@ All 10 videos assembled and stored in Supabase storage.
 - Hashtags: #mroldverdict #shorts #comedy #wisdom #observations
 - Instagram caption: Second line of the script + hashtags
 
+### Category Streak Logic (built into council getNextTopic)
+Mini streaks train YouTube's algorithm who to show the channel to. Posting 3-4 videos in the same category builds a viewer identity faster than random rotation.
+
+- **Streak cap**: 3 videos max in same category. On 4th → force rotation.
+- **Wildcard**: Every 8th video is forced Category E regardless of streak. Tests new audience pockets.
+- **Streak continues**: If last 2 videos are same category, pick same category again.
+- **Default**: Highest engagement score topic across all categories.
+
+Example cycle:
+- Videos 1-3: Category B (corporate, high engagement score) → streak
+- Video 4: Force rotation → Category A (modern behavior)
+- Videos 5-7: Category A streak
+- Video 8: Wildcard → Category E
+
 ---
 
 ## 18. WHAT IS DONE
@@ -392,9 +408,12 @@ All 10 videos assembled and stored in Supabase storage.
 - [ ] **Setup card duration**: If swipe away remains above 70%, shorten setup card from 5.0 seconds to 3.5 seconds in app.py `build_setup_card` call. Gets to Mr. Oldverdict's face and voice faster.
 - [ ] **Best performing video**: Note which topic/category held attention longest. Skew future council generation toward that category.
 - [ ] **OAuth consent screen**: Reminder — refresh token was issued February 28. If OAuth was not fully moved to Production before this date, reissue refresh token now.
-- [ ] **OAuth consent screen to Production**: Currently in Testing mode. Refresh token expires in 7 days (March 7). Go to Google Cloud Console → APIs & Services → OAuth consent screen → Publish app → Submit for verification OR switch to Production. If this is not done YouTube publishing stops on March 7.
+- [x] **OAuth consent screen**: Moved to Production on March 1 2026. Refresh token does not expire.
 
 ### Immediate
+- [ ] **Remove council worker cron triggers**: Council worker still has 2 cron triggers from before orchestration was built (11 AM and 8 PM UTC). These now fire redundantly alongside orchestration. Go to Cloudflare → council worker → Settings → Trigger Events → delete both crons. Council is now called by orchestration only.
+- [ ] **Run ingestion manually once**: Topics queue may be low. POST to ingestion worker to populate before next orchestration run: `fetch("https://ingestion.rkinfoarch.workers.dev/", { method: "POST", headers: { "Authorization": "Bearer mroldverdict_xK9mP1978" } }).then(r => r.json()).then(console.log)`
+- [ ] **Add ingestion call to orchestration worker**: Current orchestration does not top up the topics queue before calling council. Council falls back to Category E when queue is empty. Fix: orchestration worker should POST to ingestion worker as Step 0 before calling council.
 - [ ] **Publish remaining 9 buffer videos**: Use `/publish` route manually. Script IDs in Section 16. Post 2 per day starting today.
 - [ ] **YouTube channel art**: Profile picture and banner for @mroldverdict using reference image.
 - [ ] **Character consistency**: Leonardo reference image locking. Try `init_image_id` approach. Upload reference image to Leonardo API, get internal ID, use in generation with strength 0.2-0.3.
@@ -528,8 +547,7 @@ Built and confirmed working February 28 2026. Full end-to-end pipeline runs unat
 - Client ID: 370659147583-f9ne5g87cstg9vbbtm29d4iql3i7lpc5.apps.googleusercontent.com
 - Client secret: stored in Render environment as `YT_CLIENT_SECRET`
 - Refresh token: stored in Render environment as `YT_REFRESH_TOKEN`
-- **Refresh token expires: March 7 2026** (7 days from issue — Testing mode limitation)
-- OAuth consent screen status: Testing. Must publish to Production before March 7.
+- **OAuth consent screen status: Production. Refresh token does not expire.**
 
 ### Render Environment Variables (YouTube)
 | Key | Value |
@@ -565,7 +583,54 @@ Every script must clear this bar before approval.
 
 ---
 
-## 26. WORTHBUYING — SECOND CONCEPT
+## 30. ANALYTICS AND OBSERVATIONS
+
+### Purpose
+Running log of what works and what doesn't. Updated after every analytics review. Used to harden ingestion, council prompts, and content strategy over time.
+
+### Content Performance — Early Observations (March 1 2026)
+| Signal | Observation | Action |
+|--------|-------------|--------|
+| Corporate topics | Strong. "Professionals adding Chief to titles" — 42 views, 1 like in 15 minutes on zero-subscriber channel. | Boost Category B corporate topics in ingestion |
+| AI topics | Strong early signal. | Boost in ingestion |
+| Heavy/political topics | "Employees learning about wage theft" — 0 views in 13 minutes. Word "wage theft" feels political, heavy. Swipe before character appears. | Filter heavy words at ingestion scoring stage |
+| Vague topics | "People dealing with persistent dye" — 0 views in 8 minutes. Unclear behavior = no curiosity = instant swipe. | Favor specific, recognizable behaviors |
+| Swipe away rate | 80% on day one. Expected. | Review March 8. |
+
+### What Makes a Title Work (Confirmed March 1 2026)
+The swipe decision happens in 1 second on the setup card. Three things that make it work:
+1. **Instantly recognizable behavior** — everyone has seen this happen
+2. **Slightly absurd** — makes you want to hear the punchline
+3. **Light not heavy** — corporate but not political, relatable but not preachy
+
+### What Kills a Title
+- Heavy or political words — wage, theft, discrimination, protest, rights
+- Vague behaviors — unclear what's happening, no curiosity created
+- Too niche — only some people recognize it
+
+### Confirmed Hit Words (March 1 2026 — live data)
+These words in setup card titles drive views. Prioritize in ingestion scoring:
+`professionals`, `AI`, `hiring`, `chief`, `corporate`, `employee`, `automation`
+**Boost engagement score 2x for these keyword clusters:**
+
+Corporate/work (Category B):
+`chief`, `CEO`, `title`, `promotion`, `manager`, `productivity`, `hustle`, `career`, `office`, `workplace`, `burnout`, `meeting`, `salary`, `corporate`, `employee`, `professional`, `job`, `hired`, `fired`, `resign`
+
+AI/tech behavior (Category A/B):
+`AI`, `artificial intelligence`, `algorithm`, `automation`, `robot`, `chatbot`, `generated`, `digital`, `app`, `subscription`
+
+Relatable modern behavior (Category A):
+`people are`, `everyone is`, `millennials`, `gen z`, `wellness`, `mindfulness`, `optimize`, `hack`, `routine`, `morning routine`
+
+**Penalize score 0.5x for these:**
+`wage`, `theft`, `discrimination`, `protest`, `rights`, `lawsuit`, `arrested`, `crime`, `death`, `killed`, `political`, `election`
+
+### 7 Day Review — March 8 2026
+- [ ] Check swipe away rate, average view duration, traffic source, audience geography
+- [ ] Note best performing video topic and category
+- [ ] Update this section with findings
+- [ ] Adjust ingestion keyword weights based on data
+- [ ] Shorten setup card to 3.5s if swipe away remains above 70%
 
 ### Concept
 Fully automated faceless affiliate content engine for the Indian market. Eight AI-generated family characters — no faces shown, voice only. Each character has a fixed voice and product category. Every video is a three-beat script: character in a real situation, discovers a product naturally, closes with one soft line and affiliate link. No salesperson voice. No urgency theater. Just the family talking the way they actually would.
