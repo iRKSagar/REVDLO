@@ -531,7 +531,7 @@ def build_outro_card(video_width, video_height, outro_audio_path=None, duration=
         return None
 
 
-def build_setup_card(setup_text, video_width, video_height, image_path=None, duration=5.0, typewriter_sound_path=None, logo_path=None):
+def build_setup_card(setup_text, video_width, video_height, image_path=None, duration=3.5, typewriter_sound_path=None, logo_path=None):
     """Build a typewriter-effect setup card with optional background image."""
     try:
         from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, ImageClip, concatenate_videoclips
@@ -676,8 +676,8 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
 
     audio_faded = audio.audio_fadein(0.4).audio_fadeout(0.5)
 
-    pre_hold = 1.0
-    post_hold = 2.0
+    pre_hold = 0.2
+    post_hold = 1.2
     total_image_duration = pre_hold + duration + post_hold
 
     from moviepy.audio.AudioClip import AudioClip, concatenate_audioclips
@@ -697,7 +697,7 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
         main_layers = [image_clip, dark_band] + caption_clips
 
     main_clip = CompositeVideoClip(main_layers, size=(target_width, target_height))
-    main_clip = main_clip.fadein(0.8).set_audio(extended_audio).set_duration(total_image_duration).fadeout(0.6)
+    main_clip = main_clip.fadein(0.3).set_audio(extended_audio).set_duration(total_image_duration).fadeout(0.6)
 
     from moviepy.editor import concatenate_videoclips, ColorClip as _ColorClip
     clips = []
