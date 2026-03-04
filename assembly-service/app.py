@@ -676,7 +676,7 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
 
     audio_faded = audio.audio_fadein(0.4).audio_fadeout(0.5)
 
-    pre_hold = 0.2
+    pre_hold = 0.05
     post_hold = 1.2
     total_image_duration = pre_hold + duration + post_hold
 
