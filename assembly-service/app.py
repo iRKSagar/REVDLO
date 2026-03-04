@@ -539,7 +539,7 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
 
         if image_path and os.path.exists(image_path):
             bg_img = ImageClip(image_path).resize((video_width, video_height))
-            dark_overlay = ColorClip(size=(video_width, video_height), color=(0, 0, 0)).set_opacity(0.82)
+            dark_overlay = ColorClip(size=(video_width, video_height), color=(0, 0, 0)).set_opacity(0.65)
             bg_base = CompositeVideoClip([bg_img, dark_overlay], size=(video_width, video_height))
         else:
             bg_base = ColorClip(size=(video_width, video_height), color=(15, 15, 15))
