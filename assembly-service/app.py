@@ -379,7 +379,7 @@ def build_caption_clips(lines, video_duration, video_width, video_height):
     for i, line in enumerate(lines):
         w = char_counts[i]
         if line.get('pause_after', False):
-            w *= 1.4
+            w *= 1.65
         weights.append(w)
     total_weight = sum(weights)
 
