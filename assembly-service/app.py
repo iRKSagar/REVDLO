@@ -557,7 +557,7 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
         for i in range(0, total_chars, chunk_size):
             shown_chars = min(i + chunk_size, total_chars)
             partial_text = setup_text[:shown_chars]
-            clip_start = 0.5 + (i * char_interval)
+            clip_start = 0.15 + (i * char_interval)
             clip_end = 0.5 + (min(i + chunk_size, total_chars) * char_interval)
             clip_duration = max(clip_end - clip_start, 0.1)
 
