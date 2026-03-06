@@ -337,17 +337,16 @@ def strip_emotion_tags(text):
     return re.sub(r'\[.*?\]', '', text).strip()
 
 
-# ─── Setup card (full brightness face + typewriter) ───────────────────────────
+# ─── Setup card (full brightness face, static text) ─────────────────────────
 
 def build_setup_card(setup_text, video_width, video_height, image_path=None,
                      duration=5.0, typewriter_sound_path=None, logo_path=None):
-    """Full brightness face. Typewriter text on screen.
-    No dark overlay — face fully visible from frame 1."""
+    """Full brightness face. Setup text appears instantly — no typewriter animation,
+    no sound. Clean static card. Face visible, text readable."""
     try:
         from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, ImageClip
 
         if image_path and os.path.exists(image_path):
-            # PIL crop — same approach as main clip, no MoviePy fx chain
             pil_bg = PIL.Image.open(image_path).convert('RGB')
             img_w, img_h = pil_bg.size
             scale = max(video_width / img_w, video_height / img_h) * 1.2
@@ -363,57 +362,28 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None,
         else:
             bg_base = ColorClip(size=(video_width, video_height), color=(15, 15, 15))
 
-        # Subtle dark band only behind the text — not over the whole face
-        text_band = (ColorClip(size=(video_width, 180), color=(0, 0, 0))
-                     .set_opacity(0.45)
-                     .set_position((0, int(video_height * 0.38))))
+        bg_clip = bg_base.set_duration(duration)
 
-        # Typewriter effect — chunked text appearing character by character
-        chars = list(setup_text)
-        total_chars = len(chars)
-        type_duration = duration - 1.5
-        char_interval = type_duration / max(total_chars, 1)
+        # Dark band behind text only — not over the whole face
+        text_band = (ColorClip(size=(video_width, 200), color=(0, 0, 0))
+                     .set_opacity(0.50)
+                     .set_position(('center', int(video_height * 0.38)))
+                     .set_duration(duration))
 
-        frames_clips = []
-        chunk_size = max(1, total_chars // 20)
-        last_end = 0.5
-
-        for i in range(0, total_chars, chunk_size):
-            partial_text = setup_text[:min(i + chunk_size, total_chars)]
-            clip_start = 0.15 + (i * char_interval)
-            clip_end = 0.5 + (min(i + chunk_size, total_chars) * char_interval)
-            clip_duration = max(clip_end - clip_start, 0.1)
-
-            txt_clip = (TextClip(
-                partial_text,
-                fontsize=42,
-                color='white',
-                font='DejaVu-Serif',
-                method='caption',
-                size=(video_width - 120, None),
-                align='center'
-            )
-            .set_position(('center', int(video_height * 0.44)))
-            .set_start(clip_start)
-            .set_duration(clip_duration))
-
-            frames_clips.append(txt_clip)
-            last_end = clip_end
-
-        final_txt = (TextClip(
+        # Setup text — appears instantly, full duration
+        txt_clip = (TextClip(
             setup_text,
-            fontsize=42,
+            fontsize=38,
             color='white',
             font='DejaVu-Serif',
             method='caption',
-            size=(video_width - 120, None),
+            size=(video_width - 100, None),
+            stroke_color='black',
+            stroke_width=2,
             align='center'
         )
-        .set_position(('center', int(video_height * 0.44)))
-        .set_start(last_end)
-        .set_duration(duration - last_end))
-
-        bg_clip = bg_base.set_duration(duration)
+        .set_position(('center', int(video_height * 0.42)))
+        .set_duration(duration))
 
         logo_clips = []
         if logo_path and os.path.exists(logo_path):
@@ -426,23 +396,8 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None,
             except Exception as e:
                 print(f'Logo on setup card failed: {e}')
 
-        all_clips = [bg_clip, text_band] + logo_clips + frames_clips + [final_txt]
+        all_clips = [bg_clip, text_band] + logo_clips + [txt_clip]
         card = CompositeVideoClip(all_clips, size=(video_width, video_height)).set_duration(duration)
-
-        if typewriter_sound_path and os.path.exists(typewriter_sound_path):
-            try:
-                from moviepy.editor import AudioFileClip as _AFC
-                from moviepy.audio.AudioClip import concatenate_audioclips as _concat
-                tw_single = _AFC(typewriter_sound_path)
-                type_dur = last_end - 0.5
-                loops_needed = int(type_dur / tw_single.duration) + 2
-                looped = _concat([tw_single] * loops_needed)
-                tw_trimmed = looped.subclip(0, type_dur).audio_fadeout(0.4)
-                tw_trimmed = tw_trimmed.set_start(0.5)
-                card = card.set_audio(tw_trimmed)
-            except Exception as e:
-                print(f'Typewriter audio failed: {e}')
-
         return card
 
     except Exception as e:
@@ -627,7 +582,7 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None,
                    outro_bg_path=None, logo_path=None):
     """
     Video structure:
-    1. Setup card — full brightness face, typewriter text, logo (5s) → fade out 0.8s
+    1. Setup card — full brightness face, static text, logo (5s) → fade out 0.8s
     2. Main clip — face fades in 0.3s, voice starts immediately
        - Leather/HUD panel with captions: setup text → line 1 → line 2
        - Ken Burns slow zoom 1.0x → 1.08x throughout
@@ -690,7 +645,7 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None,
 
     clips = []
 
-    # Setup card: full brightness face + typewriter
+    # Setup card: full brightness face + static text
     if setup_text:
         setup_card = build_setup_card(
             setup_text, target_width, target_height,
@@ -839,7 +794,7 @@ def run_pipeline_job():
         script = get_script(script_id)
 
         outro_sound_url = get_outro_sound_url(SUPABASE_URL, SUPABASE_KEY)
-        typewriter_sound_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'typewriter_sound_url')
+        # typewriter_sound_url no longer used — sound removed
         outro_bg_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'outro_bg_url')
         logo_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'logo_url')
 
@@ -855,11 +810,7 @@ def run_pipeline_job():
             except Exception as e:
                 print(f'[Pipeline] Outro sound download failed: {e}')
 
-        if typewriter_sound_url:
-            try:
-                typewriter_sound_path = download_file(typewriter_sound_url, '.mp3')
-            except Exception as e:
-                print(f'[Pipeline] Typewriter sound download failed: {e}')
+
 
         if outro_bg_url:
             try:
@@ -978,7 +929,7 @@ def assemble():
         script = get_script(script_id)
 
         outro_sound_url = get_outro_sound_url(SUPABASE_URL, SUPABASE_KEY)
-        typewriter_sound_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'typewriter_sound_url')
+        # typewriter_sound_url no longer used — sound removed
         outro_bg_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'outro_bg_url')
         logo_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'logo_url')
 
@@ -1000,12 +951,7 @@ def assemble():
             except Exception as e:
                 print(f'Outro sound download failed: {e}')
 
-        typewriter_sound_path = None
-        if typewriter_sound_url:
-            try:
-                typewriter_sound_path = download_file(typewriter_sound_url, '.mp3')
-            except Exception as e:
-                print(f'Typewriter sound download failed: {e}')
+        typewriter_sound_path = None  # sound removed
 
         outro_bg_path = None
         if outro_bg_url:
