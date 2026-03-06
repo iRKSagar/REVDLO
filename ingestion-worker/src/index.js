@@ -850,6 +850,15 @@ def run_pipeline_job():
             except Exception as e:
                 print(f'[Pipeline] Logo download failed: {e}')
 
+        leather_panel_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'leather_panel_url')
+        leather_panel_path = None
+        if leather_panel_url:
+            try:
+                leather_panel_path = download_file(leather_panel_url, '.png')
+                print(f'[Pipeline] Leather panel downloaded')
+            except Exception as e:
+                print(f'[Pipeline] Leather panel download failed: {e}')
+
         output_path = tempfile.mktemp(suffix='.mp4')
 
         lines = script.get('lines', [])
@@ -1002,7 +1011,7 @@ def assemble():
         leather_panel_path = None
         if leather_panel_url:
             try:
-                leather_panel_path = download_file(leather_panel_url, '.jpg')
+                leather_panel_path = download_file(leather_panel_url, '.png')
             except Exception as e:
                 print(f'Leather panel download failed: {e}')
 
