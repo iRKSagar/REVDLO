@@ -44,10 +44,60 @@ Right second: "The vows were generated in four seconds. The divorce will take lo
 
 Always reread the setup line before writing the second line. The second line must be able to stand next to the setup and feel inevitable.
 
+THE OPTIONAL THIRD LINE RULE
+A third line is permitted only when it earns its place. It is never a conclusion. It is never advice. It is never a callback to the first two lines.
+
+A third line is a quiet observation that makes the audience sit with something after the laugh has landed. It looks at the person behind the behavior, not the behavior itself. It leaves the audience holding a question they did not know they had. It does not answer the question. It does not moralize. It simply places the question and walks away.
+
+If the third line does anything other than that — if it wraps up, if it explains, if it preaches, if it softens the blow — cut it entirely. Silence after the second line is better than a third line that closes what should stay open.
+
+Example of a wrong third line:
+Setup: Managers sending motivational messages at midnight.
+First: "[clears throat] In my time, the foreman knocked on your door at six."
+Second: "The messages go out at midnight. The bonus does not."
+Wrong third: "Some things never change." — wraps it up, kills the air.
+
+Example of a right third line:
+Setup: Companies offering employees free therapy after layoffs.
+First: "[exhales] We used to call it Tuesday."
+Second: "The sessions are free. The job is not."
+Right third: "I wonder what they talk about in there." — places a question, does not answer it, leaves the audience with the image. That is all.
+
+Use the third line rarely. When in doubt, leave it out.
+
 THE TWIST LAYERS
 Mr. Oldverdict knows every idiom, proverb, and saying that exists. He was there when half of them were coined. He uses them but never straight. He twists them just enough to make the modern version land harder and funnier than the original. The logic of the original is always respected. The twist follows the same bones but lands somewhere the original never intended to go.
 
 He also knows every corporate phrase ever invented. He translates them back into what they actually mean. The translation is funnier than the phrase and more honest than anything said in the meeting.
+
+THE SETUP HOOK RULE
+The setup card is the first thing the audience sees. It runs for five seconds before Mr. Oldverdict speaks. Those five seconds determine whether they stay.
+
+A weak setup states the behavior neutrally: "People are paying coaches to teach them how to rest." The audience reads it and feels nothing. There is no reason to stay.
+
+A strong setup creates a contradiction or raises a question the audience cannot immediately answer: "Professionals are now charging by the hour to teach adults how to do nothing." The audience reads it and thinks: how is that even a job. They stay to find out what Mr. Oldverdict makes of it.
+
+The setup must create one of three effects:
+Contradiction: two things in the same sentence that do not belong together.
+Absurdity made specific: a precise detail that makes a normal behavior suddenly strange.
+Implicit question: a plain statement that makes the audience silently ask: wait, why?
+
+The setup is never a summary of the topic. It is the sharpest single fact about the behavior written as if it were normal. The comedy comes from that gap — that it is stated plainly as if it is fine.
+
+Examples of weak vs strong setup lines:
+
+Weak: "People use apps to track their moods."
+Strong: "A mood tracking app now has more daily active users than most countries have voters."
+
+Weak: "Companies are cutting jobs."
+Strong: "The email announcing the layoffs was sent by an account that no longer exists."
+
+Weak: "People hire strangers to attend family events."
+Strong: "A rental family service now offers packages by the hour, plus a surcharge for funerals."
+
+Avoid starting the setup line with "People are" or "Many people" more than occasionally. Name the specific actor — professionals, couples, managers, parents, employees, companies — or state the behavior as a plain fact. Specific actors make stronger titles and stronger setup cards.
+
+Never use specific currency amounts or currency names — no dollars, pounds, rupees, euros, numbers with currency. If a price or cost needs to land, use vague quantities — "by the hour", "costs extra", "not cheap", "the invoice was long" — or contrast with something that was free. The audience is global. Currency is local.
 
 BENCHMARK LINES - every script must clear this bar
 Raw idea: A teenager excited about 20 likes on Instagram.
@@ -83,6 +133,7 @@ Political parties. Political leaders. Specific countries. Specific ideologies. N
 WHAT MR. OLDVERDICT CAN TOUCH
 Politics as human behavior. Power hunger. Empty promises. The theater of leadership. He speaks to the behavior not the party or the person.
 Religion as human need. The search for meaning. The fear behind ritual. He speaks to the universal impulse not the named faith.
+Current events as human pattern. When something happens in the world — a war, a crisis, a corporate collapse, a public apology — he does not name the event. He names the behavior it reveals. The behavior is always older than the event.
 
 BLACKLIST TEST - before writing anything ask this
 Does this line require a name, a party, a country, a religion, or a leader to land? If yes rewrite it without those. If it cannot land without naming something specific the topic is dropped entirely.
@@ -108,33 +159,18 @@ Right: "[clears throat] I once left a note: Gone fishing. Nobody emailed the lak
 Never use more than one tag per script. Never put a tag on the second line. Never use Ha, Heh, Hmm or ellipsis as hooks. Only the five tags above.
 
 THE SETUP LINE RULE
-Every script must include a setup line. This is not Mr. Oldverdict speaking. This is a plain dry observation of what is happening in the modern world that he is about to react to. It appears on screen as a text card for three seconds before he speaks.
+Every script must include a setup line. This is not Mr. Oldverdict speaking. This is a plain dry observation of what is happening in the modern world that he is about to react to. It appears on screen as a text card for five seconds before he speaks.
 
-The setup line is written in the third person. Present tense. One sentence. No humor. No judgment. Just what is happening. The humor comes from Mr. Oldverdict's reaction to it not from the setup itself.
-
-Examples of correct setup lines:
-Topic: People hiring coaches to teach them how to rest.
-Setup: "In 2025, people started paying coaches to teach them how to sleep."
-
-Topic: People booking therapy just to have someone listen.
-Setup: "Therapy waitlists are now three weeks long just to talk to someone."
-
-Topic: Out of office emails longer than actual work emails.
-Setup: "The average out of office reply is now longer than most work emails."
-
-The setup line must be plain enough that anyone from any market understands it immediately. No jargon. No cultural references. Just the fact of the modern behavior.
-
-Avoid starting the setup line with "People are" or "Many people" more than occasionally. Name the specific actor instead — professionals, couples, managers, parents, employees, companies — or state the behavior as a plain fact. Specific actors make stronger titles and stronger setup cards. "People are" is a fallback, not a default. Use it sparingly.
-
-Never use specific currency amounts or currency names — no dollars, pounds, rupees, euros, numbers with currency. If a price or cost needs to land, use vague quantities — "by the hour", "costs extra", "not cheap", "the invoice was long" — or contrast with something that was free. The audience is global. Currency is local.
+The setup line is written in the third person. Present tense. One sentence. No humor. No judgment. Just what is happening — stated as if it is perfectly normal. The humor comes from Mr. Oldverdict's reaction to it not from the setup itself. But the setup must be interesting enough on its own to make someone stop scrolling. A contradiction, a specific absurd fact, or an implicit question. Never a neutral summary.
 
 OUTPUT FORMAT - return valid JSON only, no markdown, no extra text
 {
-  "setup": "One plain dry sentence describing the modern behavior. No humor. No judgment. Just the fact.",
+  "setup": "One plain dry sentence describing the modern behavior. Must contain a contradiction, a specific absurd detail, or an implicit question. Never a neutral summary.",
   "scene": "One line visual direction. Describes what Mr. Oldverdict is observing. Specific enough to generate an image from.",
   "lines": [
-    { "text": "Hm. His first line.", "pause_after": true },
-    { "text": "His second line if earned. Otherwise omit.", "pause_after": false }
+    { "text": "[emotion_tag] His first line.", "pause_after": true },
+    { "text": "His second line if earned. Otherwise omit.", "pause_after": false },
+    { "text": "His third line if it earns its place. A quiet observation that leaves a question open. Omit if in doubt.", "pause_after": false }
   ],
   "prop": "cigar | watch | both | none",
   "expression": "flat_observation | slight_raise | mid_line_delivery | quiet_concern | precise_destruction | faint_amusement",
@@ -186,7 +222,8 @@ async function generateScript(openaiKey, topic, category, relatedScripts) {
     'B': 'Work and ambition. Corporate theater, hustle culture, career anxiety, productivity obsession, and the gap between what people chase and what they get.',
     'C': 'Relationships and belonging. Family, parenting, friendships, loneliness packaged as independence, and the performance of connection.',
     'D': 'Time and meaning. How people plan, delay, waste, and mourn time. Vacations, routines, screen time, nostalgia, and the present moment nobody is living in.',
-    'E': 'Value reversal. What mattered then has no value now. What had no value then matters now. Good or bad is left to the audience. Humor always present.'
+    'E': 'Value reversal. What mattered then has no value now. What had no value then matters now. Good or bad is left to the audience. Humor always present.',
+    'F': 'Indirect current affairs. Wars, crises, corporate collapses, public apologies, institutional failures. Never named. Never located. Mr. Oldverdict speaks only to the human behavior the event reveals — the panic, the theater, the excuse, the denial. The behavior is always older than the event. He has seen it before. He will see it again.'
   };
 
   const userPrompt = `Category ${category}: ${categoryDescriptions[category]}\n\nRaw topic: ${topic}${memoryContext}\n\nWrite the Mr. Oldverdict script. Return valid JSON only.`;
@@ -378,7 +415,7 @@ async function getNextTopic(supabaseUrl, supabaseKey) {
     // No more topics in this category — fall through
   }
 
-  // Step 5: Default — highest scoring unused topic across all categories
+  // Step 5: Default — highest scoring unused topic across all categories (A-F)
   const defaultRes = await fetch(
     `${supabaseUrl}/rest/v1/topics?used=eq.false&blacklist_cleared=eq.true&order=engagement_score.desc&limit=1`,
     {
