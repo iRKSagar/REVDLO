@@ -128,26 +128,22 @@ async function updateVideoRecord(supabaseUrl, supabaseKey, scriptId, audioUrl) {
 }
 
 function buildFullScript(lines, setup) {
-  // New format: setup text spoken first, then line 1, then line 2.
-  // Setup reads as a plain statement before Mr. Oldverdict reacts.
-  // Pause after setup gives space before the reaction lands.
+  // Voice speaks: setup text first, then line 1, then line 2.
+  // Setup text appears as first caption on the leather panel in sync.
   const parts = [];
 
   if (setup) {
-    // Setup text: spoken plainly, trailing ellipsis creates natural beat before reaction
     parts.push(setup.trim() + '...');
   }
 
   lines.forEach((line, index) => {
     let text = line.text;
-    // Add trailing pause on all lines except the very last
     if (index < lines.length - 1) {
       text += line.pause_after ? '...' : '.';
     }
     parts.push(text);
   });
 
-  // Extra trailing ellipsis prevents sharp audio cutoff
   return parts.join('  ').trim() + '...';
 }
 
@@ -174,7 +170,7 @@ export default {
 
       const script = await getScript(env.SUPABASE_URL, env.SUPABASE_KEY, scriptId);
 
-      // Pass setup text so voice speaks: setup → line1 → line2
+      // Voice speaks line 1 and line 2 only — setup is on screen as card
       const fullText = buildFullScript(script.lines, script.setup);
 
       const audioBuffer = await generateAudio(
