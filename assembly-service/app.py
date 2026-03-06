@@ -341,8 +341,8 @@ def strip_emotion_tags(text):
 
 def build_setup_card(setup_text, video_width, video_height, image_path=None,
                      duration=5.0, typewriter_sound_path=None, logo_path=None):
-    """Full brightness face. Setup text appears instantly — no typewriter animation,
-    no sound. Clean static card. Face visible, text readable."""
+    """Full brightness face. Setup text on leather panel at bottom — same visual
+    language as main clip captions. Silent. No animation. No floating band."""
     try:
         from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, ImageClip
 
@@ -364,25 +364,34 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None,
 
         bg_clip = bg_base.set_duration(duration)
 
-        # Dark band behind text only — not over the whole face
-        text_band = (ColorClip(size=(video_width, 200), color=(0, 0, 0))
-                     .set_opacity(0.50)
-                     .set_position(('center', int(video_height * 0.38)))
-                     .set_duration(duration))
+        # ── Leather panel — same as main clip ───────────────────────────────
+        panel_h = 260
+        panel_y = video_height - panel_h
 
-        # Setup text — appears instantly, full duration
+        leather = (ColorClip(size=(video_width, panel_h), color=(110, 58, 18))
+                   .set_opacity(0.82)
+                   .set_position((0, panel_y))
+                   .set_duration(duration))
+
+        accent = (ColorClip(size=(video_width, 6), color=(210, 145, 40))
+                  .set_opacity(0.95)
+                  .set_position((0, panel_y))
+                  .set_duration(duration))
+
+        # Setup text — sits inside the panel, same position as captions
+        text_y = panel_y + 55
         txt_clip = (TextClip(
             setup_text,
-            fontsize=38,
+            fontsize=34,
             color='white',
-            font='DejaVu-Serif',
+            font='DejaVu-Serif-Bold',
             method='caption',
-            size=(video_width - 100, None),
+            size=(video_width - 80, None),
             stroke_color='black',
             stroke_width=2,
             align='center'
         )
-        .set_position(('center', int(video_height * 0.42)))
+        .set_position(('center', text_y))
         .set_duration(duration))
 
         logo_clips = []
@@ -396,7 +405,7 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None,
             except Exception as e:
                 print(f'Logo on setup card failed: {e}')
 
-        all_clips = [bg_clip, text_band] + logo_clips + [txt_clip]
+        all_clips = [bg_clip, leather, accent] + logo_clips + [txt_clip]
         card = CompositeVideoClip(all_clips, size=(video_width, video_height)).set_duration(duration)
         return card
 
