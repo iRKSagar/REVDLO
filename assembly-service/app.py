@@ -47,24 +47,54 @@ def check_auth(req):
 # ─── Ken Burns slow zoom ───────────────────────────────────────────────────────
 
 def apply_ken_burns(clip, target_w, target_h, zoom_to=1.08):
-    """Slow progressive zoom using MoviePy native resize — reliable on CPU.
-    Grows from 1.0x to zoom_to over clip duration, cropped to target dimensions."""
+    """Frame-by-frame zoom using scipy zoom — avoids MoviePy resize fx entirely.
+    Grows from 1.0x to zoom_to, center-crops each frame back to target dimensions."""
     duration = clip.duration
     if duration < 0.1:
         return clip
 
-    # MoviePy native resize with time-varying scale — no frame-by-frame PIL loop
-    zoomed = clip.resize(lambda t: 1.0 + (zoom_to - 1.0) * (t / duration))
+    def zoom_frame(get_frame, t):
+        frame = get_frame(t)
+        if duration < 0.01:
+            return frame
+        progress = min(t / duration, 1.0)
+        scale = 1.0 + (zoom_to - 1.0) * progress
+        if scale <= 1.001:
+            return frame
+        h, w = frame.shape[:2]
+        new_h = int(h * scale)
+        new_w = int(w * scale)
+        if new_h < 1 or new_w < 1:
+            return frame
+        # scipy zoom is fast and reliable on CPU, no PIL ANTIALIAS issues
+        try:
+            from scipy.ndimage import zoom as scipy_zoom
+            # zoom each channel separately to avoid color channel issues
+            zoomed = np.stack([
+                scipy_zoom(frame[:, :, c], (new_h / h, new_w / w), order=1)
+                for c in range(frame.shape[2])
+            ], axis=2).astype(np.uint8)
+        except Exception:
+            # PIL fallback
+            img = PIL.Image.fromarray(frame)
+            img = img.resize((new_w, new_h), PIL.Image.LANCZOS)
+            zoomed = np.array(img)
+        # Center crop back to original target dimensions
+        y0 = max(0, (new_h - h) // 2)
+        x0 = max(0, (new_w - w) // 2)
+        y1 = min(y0 + h, zoomed.shape[0])
+        x1 = min(x0 + w, zoomed.shape[1])
+        result = zoomed[y0:y1, x0:x1]
+        # Ensure exact output shape
+        if result.shape[0] != h or result.shape[1] != w:
+            out = np.zeros((h, w, frame.shape[2]), dtype=np.uint8)
+            rh = min(result.shape[0], h)
+            rw = min(result.shape[1], w)
+            out[:rh, :rw] = result[:rh, :rw]
+            return out
+        return result
 
-    # Re-crop to target dimensions after zoom (keeps center framing)
-    zoomed = crop(
-        zoomed,
-        width=target_w,
-        height=target_h,
-        x_center=target_w / 2,
-        y_center=target_h / 2
-    )
-    return zoomed
+    return clip.fl(zoom_frame)
 
 
 # ─── YouTube helpers ───────────────────────────────────────────────────────────
