@@ -1,4 +1,5 @@
 import PIL.Image
+from PIL import ImageDraw
 if not hasattr(PIL.Image, "ANTIALIAS"):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
 
@@ -43,6 +44,37 @@ def check_auth(req):
     auth = req.headers.get('Authorization', '')
     return auth == f'Bearer {COUNCIL_SECRET}'
 
+
+
+# ─── Leather panel renderer (uses real leather texture image) ─────────────────
+
+def render_leather_panel(video_width, panel_h, leather_path):
+    """Load real leather texture, darken center for text readability,
+    keep ornate border/corners fully visible. Returns numpy RGBA array."""
+    try:
+        src = PIL.Image.open(leather_path).convert('RGBA')
+        panel_img = src.resize((video_width, panel_h), PIL.Image.LANCZOS)
+
+        overlay = PIL.Image.new('RGBA', (video_width, panel_h), (0, 0, 0, 0))
+        od = ImageDraw.Draw(overlay)
+
+        border_w = 44
+        cx0, cy0 = border_w, border_w
+        cx1, cy1 = video_width - border_w, panel_h - border_w
+
+        # Solid dark center for text readability
+        od.rectangle([cx0, cy0, cx1, cy1], fill=(0, 0, 0, 190))
+
+        # Feathered gradient from center edge to border — soft blend
+        for i in range(20):
+            a = int(190 * (1 - i / 20) ** 0.5)
+            od.rectangle([cx0 - i, cy0 - i, cx1 + i, cy1 + i], outline=(0, 0, 0, a))
+
+        panel_final = PIL.Image.alpha_composite(panel_img, overlay)
+        return np.array(panel_final.convert('RGB'))
+    except Exception as e:
+        print(f'[leather panel] render failed: {e}')
+        return None
 
 # ─── Static zoom (Ken Burns removed — clip.fl breaks compositing on Render CPU) ─
 # Animated zoom will be revisited once image rendering is confirmed stable.
@@ -340,7 +372,7 @@ def strip_emotion_tags(text):
 # ─── Setup card (full brightness face, static text) ─────────────────────────
 
 def build_setup_card(setup_text, video_width, video_height, image_path=None,
-                     duration=5.0, typewriter_sound_path=None, logo_path=None):
+                     duration=5.0, typewriter_sound_path=None, logo_path=None, leather_panel_path=None):
     """Full brightness face. Setup text on leather panel at bottom — same visual
     language as main clip captions. Silent. No animation. No floating band."""
     try:
@@ -364,22 +396,24 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None,
 
         bg_clip = bg_base.set_duration(duration)
 
-        # ── Leather panel — same as main clip ───────────────────────────────
-        panel_h = 260
+        # ── Leather panel — real texture same as main clip ─────────────────
+        panel_h = 310
         panel_y = video_height - panel_h
 
-        leather = (ColorClip(size=(video_width, panel_h), color=(110, 58, 18))
-                   .set_opacity(0.82)
-                   .set_position((0, panel_y))
-                   .set_duration(duration))
+        if leather_panel_path and os.path.exists(leather_panel_path):
+            arr = render_leather_panel(video_width, panel_h, leather_panel_path)
+            if arr is not None:
+                from moviepy.editor import ImageClip as _IC
+                leather_clips = [(_IC(arr).set_position((0, panel_y)).set_duration(duration))]
+            else:
+                leather_clips = [(ColorClip(size=(video_width, panel_h), color=(20,10,5))
+                                  .set_opacity(0.85).set_position((0, panel_y)).set_duration(duration))]
+        else:
+            leather_clips = [(ColorClip(size=(video_width, panel_h), color=(20,10,5))
+                              .set_opacity(0.85).set_position((0, panel_y)).set_duration(duration))]
 
-        accent = (ColorClip(size=(video_width, 6), color=(210, 145, 40))
-                  .set_opacity(0.95)
-                  .set_position((0, panel_y))
-                  .set_duration(duration))
-
-        # Setup text — sits inside the panel, same position as captions
-        text_y = panel_y + 55
+        # Setup text — sits inside the panel
+        text_y = panel_y + 43
         txt_clip = (TextClip(
             setup_text,
             fontsize=34,
@@ -405,7 +439,7 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None,
             except Exception as e:
                 print(f'Logo on setup card failed: {e}')
 
-        all_clips = [bg_clip, leather, accent] + logo_clips + [txt_clip]
+        all_clips = [bg_clip] + leather_clips + logo_clips + [txt_clip]
         card = CompositeVideoClip(all_clips, size=(video_width, video_height)).set_duration(duration)
         return card
 
@@ -416,34 +450,28 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None,
 
 # ─── Caption layer with leather panel + HUD ───────────────────────────────────
 
-def build_caption_panel(video_width, video_height, duration):
-    """Leather panel with HUD accent — visible only during voice.
-    Warm leather brown base + amber/gold accent line at top edge.
-    Colors are deliberately warm and visible, not near-black."""
-    from moviepy.editor import ColorClip
+def build_caption_panel(video_width, video_height, duration, leather_path=None):
+    """Real leather texture panel — ornate corners, stitched border, dark center.
+    Falls back to solid dark panel if leather image not available."""
+    from moviepy.editor import ColorClip, ImageClip
 
     panel_h = 310
     panel_y = video_height - panel_h
 
-    # Dark base — enough opacity to make white text readable
+    if leather_path and os.path.exists(leather_path):
+        arr = render_leather_panel(video_width, panel_h, leather_path)
+        if arr is not None:
+            panel_clip = (ImageClip(arr)
+                          .set_position((0, panel_y))
+                          .set_duration(duration))
+            return [panel_clip]
+
+    # Fallback — solid dark panel
     base = (ColorClip(size=(video_width, panel_h), color=(20, 10, 5))
-            .set_opacity(0.78)
+            .set_opacity(0.85)
             .set_position((0, panel_y))
             .set_duration(duration))
-
-    # Warm amber/brown top strip — visible identity band
-    top_strip = (ColorClip(size=(video_width, 45), color=(140, 75, 20))
-                 .set_opacity(0.90)
-                 .set_position((0, panel_y))
-                 .set_duration(duration))
-
-    # Amber/gold accent line above the strip
-    accent = (ColorClip(size=(video_width, 4), color=(210, 145, 40))
-              .set_opacity(1.0)
-              .set_position((0, panel_y - 3))
-              .set_duration(duration))
-
-    return [base, top_strip, accent]
+    return [base]
 
 
 def build_caption_clips(setup_text, lines, voice_duration, video_width, video_height):
@@ -473,7 +501,7 @@ def build_caption_clips(setup_text, lines, voice_duration, video_width, video_he
 
     panel_h = 310
     panel_y = video_height - panel_h
-    text_y = panel_y + 30  # starts higher — room for setup text
+    text_y = panel_y + 43  # 20% walked back down
 
     current_time = 0
     for i, item in enumerate(all_items):
@@ -491,12 +519,12 @@ def build_caption_clips(setup_text, lines, voice_duration, video_width, video_he
             txt_clip = (TextClip(
                 text,
                 fontsize=34,
-                color='white',
+                color='rgb(245,228,188)',
                 font='DejaVu-Serif-Bold',
                 method='caption',
                 size=(video_width - 80, None),
-                stroke_color='black',
-                stroke_width=2,
+                stroke_color='rgb(30,10,2)',
+                stroke_width=3,
                 align='center'
             )
             .set_position(('center', text_y))
@@ -822,6 +850,15 @@ def run_pipeline_job():
             except Exception as e:
                 print(f'[Pipeline] Logo download failed: {e}')
 
+        leather_panel_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'leather_panel_url')
+        leather_panel_path = None
+        if leather_panel_url:
+            try:
+                leather_panel_path = download_file(leather_panel_url, '.png')
+                print(f'[Pipeline] Leather panel downloaded')
+            except Exception as e:
+                print(f'[Pipeline] Leather panel download failed: {e}')
+
         output_path = tempfile.mktemp(suffix='.mp4')
 
         lines = script.get('lines', [])
@@ -830,7 +867,8 @@ def run_pipeline_job():
         setup_text = script.get('setup', None)
 
         assemble_video(image_path, audio_path, lines, output_path, setup_text,
-                       outro_sound_path, typewriter_sound_path, outro_bg_path, logo_path)
+                       outro_sound_path, typewriter_sound_path, outro_bg_path, logo_path,
+                       leather_panel_path=leather_panel_path)
 
         video_url = upload_video(script_id, output_path)
         update_video_record(script_id, video_url)
@@ -969,6 +1007,14 @@ def assemble():
             except Exception as e:
                 print(f'Logo download failed: {e}')
 
+        leather_panel_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'leather_panel_url')
+        leather_panel_path = None
+        if leather_panel_url:
+            try:
+                leather_panel_path = download_file(leather_panel_url, '.png')
+            except Exception as e:
+                print(f'Leather panel download failed: {e}')
+
         output_path = tempfile.mktemp(suffix='.mp4')
 
         lines = script.get('lines', [])
@@ -979,7 +1025,8 @@ def assemble():
         print(f"Lines: {lines}")
 
         assemble_video(image_path, audio_path, lines, output_path, setup_text,
-                       outro_sound_path, typewriter_sound_path, outro_bg_path, logo_path)
+                       outro_sound_path, typewriter_sound_path, outro_bg_path, logo_path,
+                       leather_panel_path=leather_panel_path)
 
         video_url = upload_video(script_id, output_path)
         update_video_record(script_id, video_url)
