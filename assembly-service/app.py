@@ -616,7 +616,7 @@ def build_outro_card(video_width, video_height, outro_audio_path=None,
 
 def assemble_video(image_path, audio_path, lines, output_path, setup_text=None,
                    outro_sound_path=None, typewriter_sound_path=None,
-                   outro_bg_path=None, logo_path=None):
+                   outro_bg_path=None, logo_path=None, leather_panel_path=None):
     """
     Video structure:
     1. Setup card — full brightness face, static text, logo (5s) → fade out 0.8s
