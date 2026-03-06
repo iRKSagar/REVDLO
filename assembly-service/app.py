@@ -144,8 +144,18 @@ def publish_to_youtube_job(script_id):
         title = setup[:93] + ' #Shorts'
         line1 = strip_emotion_tags(lines[0]['text']) if lines else ''
         line2 = lines[1]['text'] if len(lines) > 1 else ''
-        description = f'{line1}\n\n{line2}\n\n#mroldverdict #Shorts #comedy #wisdom #observations'
-        tags = ['mroldverdict', 'shorts', 'comedy', 'wisdom', 'observations', 'oldverdict']
+
+        # Build topic-specific hashtags from theme_tags
+        theme_tags = script.get('theme_tags', [])
+        if isinstance(theme_tags, str):
+            import json as _json
+            theme_tags = _json.loads(theme_tags)
+        topic_hashtags = ' '.join(f'#{t.replace(" ", "")}' for t in theme_tags if t)
+        base_hashtags = '#mroldverdict #Shorts #comedy #wisdom #observations'
+        all_hashtags = f'{base_hashtags} {topic_hashtags}'.strip()
+
+        description = f'{line1}\n\n{line2}\n\n{all_hashtags}'
+        tags = ['mroldverdict', 'shorts', 'comedy', 'wisdom', 'observations', 'oldverdict'] + [t.replace(' ', '') for t in theme_tags if t]
 
         video_path = download_file(video_url, '.mp4')
         yt_id = upload_to_youtube(video_path, title, description, tags)
@@ -176,7 +186,15 @@ def build_instagram_caption(script_row):
     else:
         raw = script_row.get('setup', '')
     clean = re.sub(r'^\[[^\]]+\]\s*', '', raw).strip()
-    return f'{clean}\n\n{INSTAGRAM_HASHTAGS}'
+    # Add topic-specific hashtags from theme_tags
+    theme_tags = script_row.get('theme_tags', [])
+    if isinstance(theme_tags, str):
+        import json as _json
+        theme_tags = _json.loads(theme_tags)
+    topic_hashtags = ' '.join(f'#{t.replace(" ", "")}' for t in theme_tags if t)
+    all_hashtags = f'{INSTAGRAM_HASHTAGS} {topic_hashtags}'.strip()
+
+    return f'{clean}\n\n{all_hashtags}'
 
 
 def publish_reel_to_instagram(video_public_url, caption):
@@ -303,7 +321,7 @@ def get_video_record(script_id):
 
 def get_script(script_id):
     response = requests.get(
-        f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id}&limit=1&select=id,setup,lines,scene,prop,expression',
+        f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id}&limit=1&select=id,setup,lines,scene,prop,expression,theme_tags',
         headers={'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
     )
     response.raise_for_status()
@@ -329,20 +347,19 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None,
         from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, ImageClip
 
         if image_path and os.path.exists(image_path):
-            # Face zoom + crop, full brightness, no overlay
-            bg_raw = ImageClip(image_path)
-            img_w, img_h = bg_raw.size
+            # PIL crop — same approach as main clip, no MoviePy fx chain
+            pil_bg = PIL.Image.open(image_path).convert('RGB')
+            img_w, img_h = pil_bg.size
             scale = max(video_width / img_w, video_height / img_h) * 1.2
             new_w = int(img_w * scale)
             new_h = int(img_h * scale)
-            bg_raw = bg_raw.resize((new_w, new_h))
-            bg_base = crop(
-                bg_raw,
-                width=video_width,
-                height=video_height,
-                x_center=new_w / 2,
-                y_center=new_h * 0.38
-            )
+            pil_bg = pil_bg.resize((new_w, new_h), PIL.Image.LANCZOS)
+            x0 = (new_w - video_width) // 2
+            y0 = int(new_h * 0.38) - video_height // 2
+            y0 = max(0, min(y0, new_h - video_height))
+            x0 = max(0, min(x0, new_w - video_width))
+            pil_bg = pil_bg.crop((x0, y0, x0 + video_width, y0 + video_height))
+            bg_base = ImageClip(np.array(pil_bg))
         else:
             bg_base = ColorClip(size=(video_width, video_height), color=(15, 15, 15))
 
@@ -625,29 +642,30 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None,
     target_width = 540
     target_height = 960
 
-    # ── Load and frame image ─────────────────────────────────────────────────
-    image_clip = ImageClip(image_path)
-    img_w, img_h = image_clip.size
+    # ── Load, resize and crop image entirely in PIL — no MoviePy fx chain ──────
+    # Doing all spatial transforms in PIL before handing to MoviePy avoids
+    # silent failures in resize/crop chains on Render's CPU environment.
+    pil_img = PIL.Image.open(image_path).convert('RGB')
+    img_w, img_h = pil_img.size
+    # 1.2x scale for tight face framing
     scale = max(target_width / img_w, target_height / img_h) * 1.2
     new_w = int(img_w * scale)
     new_h = int(img_h * scale)
-    image_clip = image_clip.resize((new_w, new_h))
-    image_clip = crop(
-        image_clip,
-        width=target_width,
-        height=target_height,
-        x_center=new_w / 2,
-        y_center=new_h * 0.38
-    )
+    pil_img = pil_img.resize((new_w, new_h), PIL.Image.LANCZOS)
+    # Crop: x center, y at 38% (upper body / face)
+    x0 = (new_w - target_width) // 2
+    y0 = int(new_h * 0.38) - target_height // 2
+    y0 = max(0, min(y0, new_h - target_height))
+    x0 = max(0, min(x0, new_w - target_width))
+    pil_img = pil_img.crop((x0, y0, x0 + target_width, y0 + target_height))
+    frame_array = np.array(pil_img)
 
     # ── Total main clip duration: voice + clean hold ─────────────────────────
     post_hold = 2.2
     total_duration = voice_duration + post_hold
-    image_clip = image_clip.set_duration(total_duration)
 
-    # ── Static zoom baked into crop above (1.2x scale = tight face framing) ──
-    # Ken Burns animated zoom removed — clip.fl() breaks CompositeVideoClip
-    # on Render's CPU environment. Will revisit with pre-rendered approach.
+    # Single clean ImageClip from processed numpy array — no transforms applied
+    image_clip = ImageClip(frame_array).set_duration(total_duration)
 
     # ── Leather panel + HUD — only during voice, not during hold ────────────
     panel_layers = build_caption_panel(target_width, target_height, voice_duration)
