@@ -24,11 +24,6 @@ async function getScript(supabaseUrl, supabaseKey, scriptId) {
 }
 
 async function generateAudio(elevenLabsKey, voiceId, text) {
-  // Mr. Oldverdict voice settings
-  // Stability high for consistent dry delivery
-  // Similarity boost high to stay true to the voice
-  // Style low to avoid over-expression
-  // Speaking rate slightly slow for the unhurried pace
   const response = await fetch(`${ELEVENLABS_API_URL}/text-to-speech/${voiceId}`, {
     method: 'POST',
     headers: {
@@ -54,7 +49,6 @@ async function generateAudio(elevenLabsKey, voiceId, text) {
     throw new Error(`ElevenLabs API error: ${error}`);
   }
 
-  // Convert to Uint8Array for reliable transfer in Cloudflare Workers
   const buffer = await response.arrayBuffer();
   return new Uint8Array(buffer);
 }
@@ -81,12 +75,10 @@ async function uploadAudioToSupabase(supabaseUrl, supabaseKey, scriptId, audioBu
     throw new Error(`Supabase storage upload failed: ${error}`);
   }
 
-  // Return the public URL
   return `${supabaseUrl}/storage/v1/object/public/revdlo-media/${fileName}`;
 }
 
 async function updateVideoRecord(supabaseUrl, supabaseKey, scriptId, audioUrl) {
-  // Check if a video record exists for this script
   const checkResponse = await fetch(
     `${supabaseUrl}/rest/v1/videos?script_id=eq.${scriptId}&limit=1`,
     {
@@ -100,7 +92,6 @@ async function updateVideoRecord(supabaseUrl, supabaseKey, scriptId, audioUrl) {
   const existing = await checkResponse.json();
 
   if (existing.length > 0) {
-    // Update existing record
     const updateRes = await fetch(`${supabaseUrl}/rest/v1/videos?script_id=eq.${scriptId}`, {
       method: 'PATCH',
       headers: {
@@ -116,7 +107,6 @@ async function updateVideoRecord(supabaseUrl, supabaseKey, scriptId, audioUrl) {
       throw new Error(`Video record update failed: ${err}`);
     }
   } else {
-    // Create new video record
     const insertRes = await fetch(`${supabaseUrl}/rest/v1/videos`, {
       method: 'POST',
       headers: {
@@ -137,26 +127,28 @@ async function updateVideoRecord(supabaseUrl, supabaseKey, scriptId, audioUrl) {
   }
 }
 
-function buildFullScript(lines) {
-  // Combine all lines into one clean text for ElevenLabs
-  // Use punctuation to create natural pauses between lines
-  const built = lines
-    .map((line, index) => {
-      let text = line.text;
-      if (index < lines.length - 1) {
-        if (line.pause_after) {
-          text += '...';
-        } else {
-          text += '.';
-        }
-      }
-      return text;
-    })
-    .join('  ')
-    .trim();
+function buildFullScript(lines, setup) {
+  // New format: setup text spoken first, then line 1, then line 2.
+  // Setup reads as a plain statement before Mr. Oldverdict reacts.
+  // Pause after setup gives space before the reaction lands.
+  const parts = [];
 
-  // Add trailing pause so audio does not end sharp
-  return built + '...';
+  if (setup) {
+    // Setup text: spoken plainly, trailing ellipsis creates natural beat before reaction
+    parts.push(setup.trim() + '...');
+  }
+
+  lines.forEach((line, index) => {
+    let text = line.text;
+    // Add trailing pause on all lines except the very last
+    if (index < lines.length - 1) {
+      text += line.pause_after ? '...' : '.';
+    }
+    parts.push(text);
+  });
+
+  // Extra trailing ellipsis prevents sharp audio cutoff
+  return parts.join('  ').trim() + '...';
 }
 
 export default {
@@ -171,7 +163,6 @@ export default {
       return new Response('Method not allowed', { status: 405 });
     }
 
-    // Auth check
     const authHeader = request.headers.get('Authorization');
     if (authHeader !== `Bearer ${env.COUNCIL_SECRET}`) {
       return new Response('Unauthorized', { status: 401 });
@@ -181,20 +172,17 @@ export default {
       const body = await request.json();
       const scriptId = body.script_id || null;
 
-      // Fetch the script
       const script = await getScript(env.SUPABASE_URL, env.SUPABASE_KEY, scriptId);
 
-      // Build full text from script lines
-      const fullText = buildFullScript(script.lines);
+      // Pass setup text so voice speaks: setup → line1 → line2
+      const fullText = buildFullScript(script.lines, script.setup);
 
-      // Generate audio via ElevenLabs
       const audioBuffer = await generateAudio(
         env.ELEVENLABS_API_KEY,
         env.ELEVENLABS_VOICE_ID,
         fullText
       );
 
-      // Upload audio to Supabase storage
       const audioUrl = await uploadAudioToSupabase(
         env.SUPABASE_URL,
         env.SUPABASE_KEY,
@@ -202,7 +190,6 @@ export default {
         audioBuffer
       );
 
-      // Create or update video record with audio URL
       await updateVideoRecord(env.SUPABASE_URL, env.SUPABASE_KEY, script.id, audioUrl);
 
       return new Response(JSON.stringify({
@@ -224,8 +211,6 @@ export default {
     }
   },
 
-  // Runs at 7 AM and 6 PM UTC
-  // Gives time after ingestion (6 AM) and before publish (11 AM / 8 PM)
   async scheduled(event, env, ctx) {
     ctx.waitUntil(
       fetch(`https://${env.WORKER_DOMAIN}/`, {
