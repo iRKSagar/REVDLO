@@ -422,7 +422,7 @@ def build_caption_panel(video_width, video_height, duration):
     Colors are deliberately warm and visible, not near-black."""
     from moviepy.editor import ColorClip
 
-    panel_h = 260
+    panel_h = 310
     panel_y = video_height - panel_h
 
     # Dark base — enough opacity to make white text readable
@@ -432,7 +432,7 @@ def build_caption_panel(video_width, video_height, duration):
             .set_duration(duration))
 
     # Warm amber/brown top strip — visible identity band
-    top_strip = (ColorClip(size=(video_width, 40), color=(140, 75, 20))
+    top_strip = (ColorClip(size=(video_width, 45), color=(140, 75, 20))
                  .set_opacity(0.90)
                  .set_position((0, panel_y))
                  .set_duration(duration))
@@ -440,7 +440,7 @@ def build_caption_panel(video_width, video_height, duration):
     # Amber/gold accent line above the strip
     accent = (ColorClip(size=(video_width, 4), color=(210, 145, 40))
               .set_opacity(1.0)
-              .set_position((0, panel_y - 2))
+              .set_position((0, panel_y - 3))
               .set_duration(duration))
 
     return [base, top_strip, accent]
@@ -471,9 +471,9 @@ def build_caption_clips(setup_text, lines, voice_duration, video_width, video_he
         weights.append(w)
     total_weight = sum(weights)
 
-    panel_h = 270
+    panel_h = 310
     panel_y = video_height - panel_h
-    text_y = panel_y + 55
+    text_y = panel_y + 30  # starts higher — room for setup text
 
     current_time = 0
     for i, item in enumerate(all_items):
@@ -635,8 +635,8 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None,
     panel_layers = build_caption_panel(target_width, target_height, voice_duration)
 
     # ── Captions: setup text → line 1 → line 2 ──────────────────────────────
-    # Setup text shown on card — captions for line 1 and line 2 only
-    caption_clips = build_caption_clips(None, lines, voice_duration, target_width, target_height)
+    # Setup text is first caption, then line 1, then line 2
+    caption_clips = build_caption_clips(setup_text, lines, voice_duration, target_width, target_height)
 
     # ── Compose main layers (no watermark) ──────────────────────────────────
     main_layers = [image_clip] + panel_layers + caption_clips
@@ -654,19 +654,8 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None,
 
     clips = []
 
-    # Setup card: full brightness face + static text
-    if setup_text:
-        setup_card = build_setup_card(
-            setup_text, target_width, target_height,
-            image_path=image_path,
-            duration=5.0,
-            typewriter_sound_path=typewriter_sound_path,
-            logo_path=logo_path
-        )
-        if setup_card:
-            setup_card = setup_card.fadeout(0.8)
-            clips.append(setup_card)
-
+    # No separate setup card — voice starts from frame 1.
+    # Setup text is the first caption on the leather panel.
     clips.append(main_clip)
 
     fade_gap = _ColorClip(size=(target_width, target_height), color=(0, 0, 0)).set_duration(1.5)
