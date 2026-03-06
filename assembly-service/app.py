@@ -5,6 +5,7 @@ if not hasattr(PIL.Image, "ANTIALIAS"):
 import os
 import re
 import time
+import numpy as np
 import requests
 import tempfile
 import json
@@ -15,6 +16,7 @@ from moviepy.editor import (
     ImageClip, AudioFileClip, CompositeVideoClip, TextClip
 )
 from moviepy.video.fx.all import crop
+from moviepy.audio.AudioClip import AudioClip, concatenate_audioclips
 
 app = Flask(__name__)
 
@@ -42,10 +44,32 @@ def check_auth(req):
     return auth == f'Bearer {COUNCIL_SECRET}'
 
 
+# ─── Ken Burns slow zoom ───────────────────────────────────────────────────────
+
+def apply_ken_burns(clip, target_w, target_h, zoom_to=1.08):
+    """Slow progressive zoom using MoviePy native resize — reliable on CPU.
+    Grows from 1.0x to zoom_to over clip duration, cropped to target dimensions."""
+    duration = clip.duration
+    if duration < 0.1:
+        return clip
+
+    # MoviePy native resize with time-varying scale — no frame-by-frame PIL loop
+    zoomed = clip.resize(lambda t: 1.0 + (zoom_to - 1.0) * (t / duration))
+
+    # Re-crop to target dimensions after zoom (keeps center framing)
+    zoomed = crop(
+        zoomed,
+        width=target_w,
+        height=target_h,
+        x_center=target_w / 2,
+        y_center=target_h / 2
+    )
+    return zoomed
+
+
 # ─── YouTube helpers ───────────────────────────────────────────────────────────
 
 def get_youtube_access_token():
-    """Exchange refresh token for a fresh access token."""
     res = requests.post('https://oauth2.googleapis.com/token', data={
         'client_id': YT_CLIENT_ID,
         'client_secret': YT_CLIENT_SECRET,
@@ -57,10 +81,8 @@ def get_youtube_access_token():
 
 
 def upload_to_youtube(video_path, title, description, tags):
-    """Upload video to YouTube using resumable upload. Returns YouTube video ID."""
     access_token = get_youtube_access_token()
     print(f'[Publish] Access token obtained: {access_token[:20]}...')
-    print(f'[Publish] YT_CLIENT_ID set: {bool(YT_CLIENT_ID)}, YT_CLIENT_SECRET set: {bool(YT_CLIENT_SECRET)}, YT_REFRESH_TOKEN set: {bool(YT_REFRESH_TOKEN)}')
 
     metadata = {
         'snippet': {
@@ -76,7 +98,6 @@ def upload_to_youtube(video_path, title, description, tags):
     }
 
     file_size = os.path.getsize(video_path)
-
     init_res = requests.post(
         'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',
         headers={
@@ -95,21 +116,15 @@ def upload_to_youtube(video_path, title, description, tags):
 
     upload_res = requests.put(
         upload_url,
-        headers={
-            'Content-Type': 'video/mp4',
-            'Content-Length': str(file_size)
-        },
+        headers={'Content-Type': 'video/mp4', 'Content-Length': str(file_size)},
         data=video_data,
         timeout=300
     )
     upload_res.raise_for_status()
-
-    yt_data = upload_res.json()
-    return yt_data.get('id')
+    return upload_res.json().get('id')
 
 
 def mark_script_published(script_id, youtube_video_id):
-    """Mark script as published in Supabase."""
     from datetime import datetime, timezone
     requests.patch(
         f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id}',
@@ -127,11 +142,9 @@ def mark_script_published(script_id, youtube_video_id):
 
 
 def publish_to_youtube_job(script_id):
-    """Download assembled video from Supabase and publish to YouTube."""
     video_path = None
     try:
         print(f'[Publish] Starting YouTube publish for script {script_id}')
-
         video_record = get_video_record(script_id)
         video_url = video_record.get('video_url')
         if not video_url:
@@ -150,13 +163,9 @@ def publish_to_youtube_job(script_id):
         description = f'{line1}\n\n{line2}\n\n#mroldverdict #Shorts #comedy #wisdom #observations'
         tags = ['mroldverdict', 'shorts', 'comedy', 'wisdom', 'observations', 'oldverdict']
 
-        print(f'[Publish] Downloading video from Supabase...')
         video_path = download_file(video_url, '.mp4')
-
-        print(f'[Publish] Uploading to YouTube...')
         yt_id = upload_to_youtube(video_path, title, description, tags)
         print(f'[Publish] YouTube video ID: {yt_id}')
-
         mark_script_published(script_id, yt_id)
         print(f'[Publish] Done. https://youtube.com/shorts/{yt_id}')
 
@@ -164,7 +173,6 @@ def publish_to_youtube_job(script_id):
         import traceback
         print(f'[Publish] Error: {e}')
         print(traceback.format_exc())
-
     finally:
         if video_path and os.path.exists(video_path):
             try:
@@ -176,37 +184,23 @@ def publish_to_youtube_job(script_id):
 # ─── Instagram helpers ─────────────────────────────────────────────────────────
 
 def build_instagram_caption(script_row):
-    """
-    Returns the second line of the script stripped of its emotion tag,
-    followed by the standard hashtag block.
-    Falls back to setup text if there is no second line.
-    """
     lines = script_row.get('lines', [])
     if isinstance(lines, str):
         lines = json.loads(lines)
-
     if len(lines) >= 2:
         raw = lines[1].get('text', '')
     else:
         raw = script_row.get('setup', '')
-
     clean = re.sub(r'^\[[^\]]+\]\s*', '', raw).strip()
     return f'{clean}\n\n{INSTAGRAM_HASHTAGS}'
 
 
 def publish_reel_to_instagram(video_public_url, caption):
-    """
-    Two-step Instagram Graph API publish.
-    Step 1: Create a container.
-    Step 2: Poll until FINISHED, then publish.
-    Returns the published media ID on success, raises on failure.
-    """
     if not IG_ACCESS_TOKEN or not IG_ACCOUNT_ID:
         raise ValueError('IG_ACCESS_TOKEN or IG_ACCOUNT_ID not set in environment')
 
     base = f'https://graph.facebook.com/v19.0/{IG_ACCOUNT_ID}'
 
-    # Step 1: Create container
     container_resp = requests.post(
         f'{base}/media',
         data={
@@ -219,28 +213,22 @@ def publish_reel_to_instagram(video_public_url, caption):
         timeout=60,
     )
     container_data = container_resp.json()
-
     if 'id' not in container_data:
         raise RuntimeError(f'Container creation failed: {container_data}')
 
     creation_id = container_data['id']
     print(f'[Instagram] Container created: {creation_id}')
 
-    # Step 2: Poll until FINISHED (max 5 minutes)
     for attempt in range(30):
         time.sleep(10)
         status_resp = requests.get(
             f'https://graph.facebook.com/v19.0/{creation_id}',
-            params={
-                'fields': 'status_code',
-                'access_token': IG_ACCESS_TOKEN,
-            },
+            params={'fields': 'status_code', 'access_token': IG_ACCESS_TOKEN},
             timeout=30,
         )
         status_data = status_resp.json()
         status_code = status_data.get('status_code', '')
         print(f'[Instagram] Container status ({attempt + 1}/30): {status_code}')
-
         if status_code == 'FINISHED':
             break
         if status_code == 'ERROR':
@@ -248,17 +236,12 @@ def publish_reel_to_instagram(video_public_url, caption):
     else:
         raise RuntimeError('Container did not finish processing within 5 minutes')
 
-    # Step 3: Publish
     publish_resp = requests.post(
         f'{base}/media_publish',
-        data={
-            'creation_id': creation_id,
-            'access_token': IG_ACCESS_TOKEN,
-        },
+        data={'creation_id': creation_id, 'access_token': IG_ACCESS_TOKEN},
         timeout=60,
     )
     publish_data = publish_resp.json()
-
     if 'id' not in publish_data:
         raise RuntimeError(f'Publish failed: {publish_data}')
 
@@ -268,7 +251,6 @@ def publish_reel_to_instagram(video_public_url, caption):
 
 
 def mark_script_instagram_published(script_id, instagram_media_id):
-    """Store Instagram media ID on the script row in Supabase."""
     requests.patch(
         f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id}',
         headers={
@@ -281,14 +263,9 @@ def mark_script_instagram_published(script_id, instagram_media_id):
 
 
 def publish_to_instagram_job(script_id):
-    """
-    Fetch assembled video + script from Supabase and publish as an Instagram Reel.
-    Designed to be called both from run_pipeline_job and from /publish-instagram route.
-    """
     video_path = None
     try:
         print(f'[Instagram] Starting publish for script {script_id}')
-
         video_record = get_video_record(script_id)
         video_url = video_record.get('video_url')
         if not video_url:
@@ -309,7 +286,6 @@ def publish_to_instagram_job(script_id):
         print(f'[Instagram] Error: {e}')
         print(traceback.format_exc())
         return None
-
     finally:
         if video_path and os.path.exists(video_path):
             try:
@@ -332,10 +308,7 @@ def download_file(url, suffix):
 def get_video_record(script_id):
     response = requests.get(
         f'{SUPABASE_URL}/rest/v1/videos?script_id=eq.{script_id}&limit=1',
-        headers={
-            'apikey': SUPABASE_KEY,
-            'Authorization': f'Bearer {SUPABASE_KEY}'
-        }
+        headers={'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
     )
     response.raise_for_status()
     data = response.json()
@@ -347,10 +320,7 @@ def get_video_record(script_id):
 def get_script(script_id):
     response = requests.get(
         f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id}&limit=1&select=id,setup,lines,scene,prop,expression',
-        headers={
-            'apikey': SUPABASE_KEY,
-            'Authorization': f'Bearer {SUPABASE_KEY}'
-        }
+        headers={'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
     )
     response.raise_for_status()
     data = response.json()
@@ -362,188 +332,42 @@ def get_script(script_id):
 
 
 def strip_emotion_tags(text):
-    """Remove emotion tags like [clears throat] [laughing] from caption text."""
     return re.sub(r'\[.*?\]', '', text).strip()
 
 
-def build_caption_clips(lines, video_duration, video_width, video_height):
-    caption_clips = []
-    num_lines = len(lines)
+# ─── Setup card (full brightness face + typewriter) ───────────────────────────
 
-    if num_lines == 0:
-        return caption_clips
+def build_setup_card(setup_text, video_width, video_height, image_path=None,
+                     duration=5.0, typewriter_sound_path=None, logo_path=None):
+    """Full brightness face. Typewriter text on screen.
+    No dark overlay — face fully visible from frame 1."""
+    try:
+        from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, ImageClip
 
-    cleaned = [strip_emotion_tags(l.get('text', '')) for l in lines]
-    char_counts = [max(len(t), 1) for t in cleaned]
-    weights = []
-    for i, line in enumerate(lines):
-        w = char_counts[i]
-        if line.get('pause_after', False):
-            w *= 1.65
-        weights.append(w)
-    total_weight = sum(weights)
-
-    current_time = 0
-    for i, line in enumerate(lines):
-        text = cleaned[i]
-        duration = (weights[i] / total_weight) * video_duration
-        duration = min(duration, video_duration - current_time)
-        if duration <= 0:
-            break
-
-        try:
-            txt_clip = (TextClip(
-                text,
-                fontsize=42,
-                color='white',
-                font='DejaVu-Serif-Bold',
-                method='caption',
-                size=(video_width - 80, None),
-                stroke_color='black',
-                stroke_width=2,
-                align='center'
+        if image_path and os.path.exists(image_path):
+            # Face zoom + crop, full brightness, no overlay
+            bg_raw = ImageClip(image_path)
+            img_w, img_h = bg_raw.size
+            scale = max(video_width / img_w, video_height / img_h) * 1.2
+            new_w = int(img_w * scale)
+            new_h = int(img_h * scale)
+            bg_raw = bg_raw.resize((new_w, new_h))
+            bg_base = crop(
+                bg_raw,
+                width=video_width,
+                height=video_height,
+                x_center=new_w / 2,
+                y_center=new_h * 0.38
             )
-            .set_position(('center', video_height * 0.72))
-            .set_start(current_time)
-            .set_duration(duration))
-
-            caption_clips.append(txt_clip)
-        except Exception as e:
-            print(f'Caption generation failed for line {i}: {e}')
-
-        current_time += duration
-
-    return caption_clips
-
-
-def get_outro_sound_url(supabase_url, supabase_key):
-    try:
-        response = requests.get(
-            f'{supabase_url}/rest/v1/settings?key=eq.outro_sound_url&limit=1',
-            headers={
-                'apikey': supabase_key,
-                'Authorization': f'Bearer {supabase_key}'
-            }
-        )
-        data = response.json()
-        if data and data[0].get('value') and data[0]['value'] != 'PLACEHOLDER':
-            return data[0]['value']
-    except Exception as e:
-        print(f'Failed to fetch outro sound URL: {e}')
-    return None
-
-
-def get_setting(supabase_url, supabase_key, key):
-    try:
-        response = requests.get(
-            f'{supabase_url}/rest/v1/settings?key=eq.{key}&limit=1',
-            headers={
-                'apikey': supabase_key,
-                'Authorization': f'Bearer {supabase_key}'
-            }
-        )
-        data = response.json()
-        if data and data[0].get('value'):
-            return data[0]['value']
-    except Exception as e:
-        print(f'Failed to fetch setting {key}: {e}')
-    return None
-
-
-def build_outro_card(video_width, video_height, outro_audio_path=None, duration=3.0, image_path=None, logo_path=None):
-    """Build the outro card with Mr. Oldverdict branding and character background."""
-    try:
-        from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, AudioFileClip, ImageClip
-
-        if image_path and os.path.exists(image_path):
-            bg_img = ImageClip(image_path).resize((video_width, video_height)).set_duration(duration)
-            dark_overlay = ColorClip(size=(video_width, video_height), color=(0, 0, 0)).set_opacity(0.75).set_duration(duration)
-            bg = CompositeVideoClip([bg_img, dark_overlay], size=(video_width, video_height))
-        else:
-            bg = ColorClip(size=(video_width, video_height), color=(10, 10, 10)).set_duration(duration)
-
-        name_clip = (TextClip(
-            "Mr. Oldverdict",
-            fontsize=58,
-            color='white',
-            font='DejaVu-Serif-Bold',
-            method='label',
-            align='center'
-        )
-        .set_position(('center', video_height * 0.38))
-        .set_duration(duration))
-
-        tagline_clip = (TextClip(
-            "Been watching since before.",
-            fontsize=32,
-            color='#aaaaaa',
-            font='DejaVu-Serif',
-            method='label',
-            align='center'
-        )
-        .set_position(('center', video_height * 0.50))
-        .set_duration(duration))
-
-        follow_clip = (TextClip(
-            "Your daily dose of old wisdom.",
-            fontsize=26,
-            color='#aaaaaa',
-            font='DejaVu-Serif',
-            method='label',
-            align='center'
-        )
-        .set_position(('center', video_height * 0.63))
-        .set_duration(duration))
-
-        follow2_clip = (TextClip(
-            "Follow @mroldverdict",
-            fontsize=24,
-            color='#888888',
-            font='DejaVu-Serif',
-            method='label',
-            align='center'
-        )
-        .set_position(('center', video_height * 0.70))
-        .set_duration(duration))
-
-        outro_layers = [bg, name_clip, tagline_clip, follow_clip, follow2_clip]
-        if logo_path and os.path.exists(logo_path):
-            try:
-                outro_logo = (ImageClip(logo_path)
-                    .resize(height=70)
-                    .set_position((24, 24))
-                    .set_duration(duration))
-                outro_layers.append(outro_logo)
-            except Exception as e:
-                print(f'Logo on outro failed: {e}')
-        outro = CompositeVideoClip(outro_layers, size=(video_width, video_height))
-
-        if outro_audio_path and os.path.exists(outro_audio_path):
-            try:
-                outro_audio = AudioFileClip(outro_audio_path).subclip(0, min(duration, AudioFileClip(outro_audio_path).duration))
-                outro = outro.set_audio(outro_audio)
-            except Exception as e:
-                print(f'Outro audio failed: {e}')
-
-        return outro
-    except Exception as e:
-        print(f'Outro card failed: {e}')
-        return None
-
-
-def build_setup_card(setup_text, video_width, video_height, image_path=None, duration=3.5, typewriter_sound_path=None, logo_path=None):
-    """Build a typewriter-effect setup card with optional background image."""
-    try:
-        from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, ImageClip, concatenate_videoclips
-        import numpy as np
-
-        if image_path and os.path.exists(image_path):
-            bg_img = ImageClip(image_path).resize((video_width, video_height))
-            dark_overlay = ColorClip(size=(video_width, video_height), color=(0, 0, 0)).set_opacity(0.35)
-            bg_base = CompositeVideoClip([bg_img, dark_overlay], size=(video_width, video_height))
         else:
             bg_base = ColorClip(size=(video_width, video_height), color=(15, 15, 15))
 
+        # Subtle dark band only behind the text — not over the whole face
+        text_band = (ColorClip(size=(video_width, 180), color=(0, 0, 0))
+                     .set_opacity(0.45)
+                     .set_position((0, int(video_height * 0.38))))
+
+        # Typewriter effect — chunked text appearing character by character
         chars = list(setup_text)
         total_chars = len(chars)
         type_duration = duration - 1.5
@@ -551,12 +375,10 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
 
         frames_clips = []
         chunk_size = max(1, total_chars // 20)
-        shown_chars = 0
         last_end = 0.5
 
         for i in range(0, total_chars, chunk_size):
-            shown_chars = min(i + chunk_size, total_chars)
-            partial_text = setup_text[:shown_chars]
+            partial_text = setup_text[:min(i + chunk_size, total_chars)]
             clip_start = 0.15 + (i * char_interval)
             clip_end = 0.5 + (min(i + chunk_size, total_chars) * char_interval)
             clip_duration = max(clip_end - clip_start, 0.1)
@@ -596,24 +418,24 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
         if logo_path and os.path.exists(logo_path):
             try:
                 logo_img = (ImageClip(logo_path)
-                    .resize(height=70)
-                    .set_position((24, 24))
-                    .set_duration(duration))
+                            .resize(height=70)
+                            .set_position((24, 24))
+                            .set_duration(duration))
                 logo_clips = [logo_img]
             except Exception as e:
                 print(f'Logo on setup card failed: {e}')
 
-        all_clips = [bg_clip] + logo_clips + frames_clips + [final_txt]
+        all_clips = [bg_clip, text_band] + logo_clips + frames_clips + [final_txt]
         card = CompositeVideoClip(all_clips, size=(video_width, video_height)).set_duration(duration)
 
         if typewriter_sound_path and os.path.exists(typewriter_sound_path):
             try:
                 from moviepy.editor import AudioFileClip as _AFC
-                from moviepy.audio.AudioClip import concatenate_audioclips
+                from moviepy.audio.AudioClip import concatenate_audioclips as _concat
                 tw_single = _AFC(typewriter_sound_path)
                 type_dur = last_end - 0.5
                 loops_needed = int(type_dur / tw_single.duration) + 2
-                looped = concatenate_audioclips([tw_single] * loops_needed)
+                looped = _concat([tw_single] * loops_needed)
                 tw_trimmed = looped.subclip(0, type_dur).audio_fadeout(0.4)
                 tw_trimmed = tw_trimmed.set_start(0.5)
                 card = card.set_audio(tw_trimmed)
@@ -627,102 +449,268 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
         return None
 
 
-def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, outro_sound_path=None, typewriter_sound_path=None, outro_bg_path=None, logo_path=None):
+# ─── Caption layer with leather panel + HUD ───────────────────────────────────
+
+def build_caption_panel(video_width, video_height, duration):
+    """Leather panel with HUD accent — visible only during voice.
+    Warm leather brown base + amber/gold accent line at top edge.
+    Colors are deliberately warm and visible, not near-black."""
+    from moviepy.editor import ColorClip
+
+    panel_h = 260
+    panel_y = video_height - panel_h
+
+    # Warm leather brown — genuinely visible, not black
+    leather = (ColorClip(size=(video_width, panel_h), color=(110, 58, 18))
+               .set_opacity(0.82)
+               .set_position((0, panel_y))
+               .set_duration(duration))
+
+    # Amber/gold accent line at top edge — 6px, bright
+    accent = (ColorClip(size=(video_width, 6), color=(210, 145, 40))
+              .set_opacity(0.95)
+              .set_position((0, panel_y))
+              .set_duration(duration))
+
+    return [leather, accent]
+
+
+def build_caption_clips(setup_text, lines, voice_duration, video_width, video_height):
+    """Captions for setup text + line 1 + line 2, synced to voice duration.
+    Setup text gets 1.65x weight (pause_after). All captions sit inside leather panel."""
+    caption_clips = []
+
+    all_items = []
+    if setup_text:
+        all_items.append({'text': setup_text, 'pause_after': True})
+    for line in lines:
+        all_items.append(line)
+
+    if not all_items:
+        return caption_clips
+
+    cleaned = [strip_emotion_tags(item.get('text', '')) for item in all_items]
+    char_counts = [max(len(t), 1) for t in cleaned]
+
+    weights = []
+    for i, item in enumerate(all_items):
+        w = char_counts[i]
+        if item.get('pause_after', False):
+            w *= 1.65
+        weights.append(w)
+    total_weight = sum(weights)
+
+    panel_h = 270
+    panel_y = video_height - panel_h
+    text_y = panel_y + 55
+
+    current_time = 0
+    for i, item in enumerate(all_items):
+        text = cleaned[i]
+        if not text:
+            current_time += (weights[i] / total_weight) * voice_duration
+            continue
+
+        duration = (weights[i] / total_weight) * voice_duration
+        duration = min(duration, voice_duration - current_time)
+        if duration <= 0:
+            break
+
+        try:
+            txt_clip = (TextClip(
+                text,
+                fontsize=40,
+                color='white',
+                font='DejaVu-Serif-Bold',
+                method='caption',
+                size=(video_width - 80, None),
+                stroke_color='black',
+                stroke_width=2,
+                align='center'
+            )
+            .set_position(('center', text_y))
+            .set_start(current_time)
+            .set_duration(duration))
+            caption_clips.append(txt_clip)
+        except Exception as e:
+            print(f'Caption generation failed for item {i}: {e}')
+
+        current_time += duration
+
+    return caption_clips
+
+
+def get_outro_sound_url(supabase_url, supabase_key):
+    try:
+        response = requests.get(
+            f'{supabase_url}/rest/v1/settings?key=eq.outro_sound_url&limit=1',
+            headers={'apikey': supabase_key, 'Authorization': f'Bearer {supabase_key}'}
+        )
+        data = response.json()
+        if data and data[0].get('value') and data[0]['value'] != 'PLACEHOLDER':
+            return data[0]['value']
+    except Exception as e:
+        print(f'Failed to fetch outro sound URL: {e}')
+    return None
+
+
+def get_setting(supabase_url, supabase_key, key):
+    try:
+        response = requests.get(
+            f'{supabase_url}/rest/v1/settings?key=eq.{key}&limit=1',
+            headers={'apikey': supabase_key, 'Authorization': f'Bearer {supabase_key}'}
+        )
+        data = response.json()
+        if data and data[0].get('value'):
+            return data[0]['value']
+    except Exception as e:
+        print(f'Failed to fetch setting {key}: {e}')
+    return None
+
+
+def build_outro_card(video_width, video_height, outro_audio_path=None,
+                     duration=3.0, image_path=None, logo_path=None):
+    try:
+        from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, AudioFileClip, ImageClip
+
+        if image_path and os.path.exists(image_path):
+            bg_img = ImageClip(image_path).resize((video_width, video_height)).set_duration(duration)
+            dark_overlay = ColorClip(size=(video_width, video_height), color=(0, 0, 0)).set_opacity(0.75).set_duration(duration)
+            bg = CompositeVideoClip([bg_img, dark_overlay], size=(video_width, video_height))
+        else:
+            bg = ColorClip(size=(video_width, video_height), color=(10, 10, 10)).set_duration(duration)
+
+        name_clip = (TextClip("Mr. Oldverdict", fontsize=58, color='white', font='DejaVu-Serif-Bold', method='label', align='center')
+                     .set_position(('center', video_height * 0.38)).set_duration(duration))
+        tagline_clip = (TextClip("Been watching since before.", fontsize=32, color='#aaaaaa', font='DejaVu-Serif', method='label', align='center')
+                        .set_position(('center', video_height * 0.50)).set_duration(duration))
+        follow_clip = (TextClip("Your daily dose of old wisdom.", fontsize=26, color='#aaaaaa', font='DejaVu-Serif', method='label', align='center')
+                       .set_position(('center', video_height * 0.63)).set_duration(duration))
+        follow2_clip = (TextClip("Follow @mroldverdict", fontsize=24, color='#888888', font='DejaVu-Serif', method='label', align='center')
+                        .set_position(('center', video_height * 0.70)).set_duration(duration))
+
+        outro_layers = [bg, name_clip, tagline_clip, follow_clip, follow2_clip]
+
+        if logo_path and os.path.exists(logo_path):
+            try:
+                outro_logo = ImageClip(logo_path).resize(height=70).set_position((24, 24)).set_duration(duration)
+                outro_layers.append(outro_logo)
+            except Exception as e:
+                print(f'Logo on outro failed: {e}')
+
+        outro = CompositeVideoClip(outro_layers, size=(video_width, video_height))
+
+        if outro_audio_path and os.path.exists(outro_audio_path):
+            try:
+                outro_audio = AudioFileClip(outro_audio_path).subclip(0, min(duration, AudioFileClip(outro_audio_path).duration))
+                outro = outro.set_audio(outro_audio)
+            except Exception as e:
+                print(f'Outro audio failed: {e}')
+
+        return outro
+    except Exception as e:
+        print(f'Outro card failed: {e}')
+        return None
+
+
+# ─── Main assembly ─────────────────────────────────────────────────────────────
+
+def assemble_video(image_path, audio_path, lines, output_path, setup_text=None,
+                   outro_sound_path=None, typewriter_sound_path=None,
+                   outro_bg_path=None, logo_path=None):
+    """
+    Video structure:
+    1. Setup card — full brightness face, typewriter text, logo (5s) → fade out 0.8s
+    2. Main clip — face fades in 0.3s, voice starts immediately
+       - Leather/HUD panel with captions: setup text → line 1 → line 2
+       - Ken Burns slow zoom 1.0x → 1.08x throughout
+       - Panel and captions disappear when voice ends
+    3. Post-voice hold — 2.2s clean face, no panel, zoom continues
+    4. Fade to black 0.6s + 1.5s black gap
+    5. Outro card — 3.5s, fades in 0.5s
+    """
     audio = AudioFileClip(audio_path)
-    duration = audio.duration
+    voice_duration = audio.duration
 
     target_width = 540
     target_height = 960
 
-    image_clip = ImageClip(image_path).set_duration(duration)
-
+    # ── Load and frame image ─────────────────────────────────────────────────
+    image_clip = ImageClip(image_path)
     img_w, img_h = image_clip.size
-    scale = max(target_width / img_w, target_height / img_h)
+    scale = max(target_width / img_w, target_height / img_h) * 1.2
     new_w = int(img_w * scale)
     new_h = int(img_h * scale)
     image_clip = image_clip.resize((new_w, new_h))
-
     image_clip = crop(
         image_clip,
         width=target_width,
         height=target_height,
         x_center=new_w / 2,
-        y_center=new_h / 2
+        y_center=new_h * 0.38
     )
 
-    from moviepy.editor import ColorClip
-    dark_band = (ColorClip(size=(target_width, 400), color=(0, 0, 0))
-                 .set_opacity(0.55)
-                 .set_position((0, target_height - 450))
-                 .set_duration(duration))
+    # ── Total main clip duration: voice + clean hold ─────────────────────────
+    post_hold = 2.2
+    total_duration = voice_duration + post_hold
+    image_clip = image_clip.set_duration(total_duration)
 
-    caption_clips = build_caption_clips(lines, duration, target_width, target_height)
+    # ── Ken Burns slow zoom ──────────────────────────────────────────────────
+    print('[Assemble] Applying Ken Burns zoom...')
+    image_clip = apply_ken_burns(image_clip, target_width, target_height)
 
-    try:
-        watermark = (TextClip(
-            "@mroldverdict",
-            fontsize=24,
-            color='white',
-            font='DejaVu-Serif',
-            method='label'
-        )
-        .set_opacity(0.45)
-        .set_position((target_width - 180, target_height - 50))
-        .set_duration(audio.duration))
-        main_layers = [image_clip, dark_band] + caption_clips + [watermark]
-    except Exception as e:
-        print(f'Watermark failed: {e}')
-        main_layers = [image_clip, dark_band] + caption_clips
+    # ── Leather panel + HUD — only during voice, not during hold ────────────
+    panel_layers = build_caption_panel(target_width, target_height, voice_duration)
 
-    audio_faded = audio.audio_fadein(0.4).audio_fadeout(0.5)
+    # ── Captions: setup text → line 1 → line 2 ──────────────────────────────
+    caption_clips = build_caption_clips(setup_text, lines, voice_duration, target_width, target_height)
 
-    pre_hold = 0.05
-    post_hold = 0.8
-    total_image_duration = pre_hold + duration + post_hold
+    # ── Compose main layers (no watermark) ──────────────────────────────────
+    main_layers = [image_clip] + panel_layers + caption_clips
 
-    from moviepy.audio.AudioClip import AudioClip, concatenate_audioclips
-    import numpy as np
-    silence_pre = AudioClip(lambda t: np.zeros(2), duration=pre_hold, fps=44100)
+    # ── Audio: voice starts at frame 1, silence for post hold ────────────────
+    audio_faded = audio.audio_fadein(0.3).audio_fadeout(0.5)
     silence_post = AudioClip(lambda t: np.zeros(2), duration=post_hold, fps=44100)
-    extended_audio = concatenate_audioclips([silence_pre, audio_faded, silence_post])
-
-    image_clip = image_clip.set_duration(total_image_duration)
-    dark_band = dark_band.set_duration(pre_hold + duration).set_start(0)
-    caption_clips = [c.set_start(c.start + pre_hold) for c in caption_clips]
-
-    try:
-        watermark = watermark.set_duration(total_image_duration)
-        main_layers = [image_clip, dark_band] + caption_clips + [watermark]
-    except:
-        main_layers = [image_clip, dark_band] + caption_clips
+    extended_audio = concatenate_audioclips([audio_faded, silence_post])
 
     main_clip = CompositeVideoClip(main_layers, size=(target_width, target_height))
-    main_clip = main_clip.fadein(0.3).set_audio(extended_audio).set_duration(total_image_duration).fadeout(0.6)
+    main_clip = main_clip.fadein(0.3).set_audio(extended_audio).set_duration(total_duration).fadeout(0.6)
 
+    # ── Full assembly ────────────────────────────────────────────────────────
     from moviepy.editor import concatenate_videoclips, ColorClip as _ColorClip
+
     clips = []
 
+    # Setup card: full brightness face + typewriter
     if setup_text:
-        setup_card = build_setup_card(setup_text, target_width, target_height, image_path=image_path, duration=5.0, typewriter_sound_path=typewriter_sound_path, logo_path=logo_path)
+        setup_card = build_setup_card(
+            setup_text, target_width, target_height,
+            image_path=image_path,
+            duration=5.0,
+            typewriter_sound_path=typewriter_sound_path,
+            logo_path=logo_path
+        )
         if setup_card:
             setup_card = setup_card.fadeout(0.8)
             clips.append(setup_card)
 
     clips.append(main_clip)
 
-    fade_gap = _ColorClip(size=(target_width, target_height), color=(0,0,0)).set_duration(1.5)
+    fade_gap = _ColorClip(size=(target_width, target_height), color=(0, 0, 0)).set_duration(1.5)
     clips.append(fade_gap)
 
-    outro_audio_path = outro_sound_path
-    outro_card = build_outro_card(target_width, target_height, outro_audio_path=outro_audio_path, duration=3.5, image_path=outro_bg_path, logo_path=logo_path)
+    outro_card = build_outro_card(
+        target_width, target_height,
+        outro_audio_path=outro_sound_path,
+        duration=3.5,
+        image_path=outro_bg_path,
+        logo_path=logo_path
+    )
     if outro_card:
         outro_card = outro_card.fadein(0.5)
         clips.append(outro_card)
 
-    if len(clips) > 1:
-        final = concatenate_videoclips(clips)
-    else:
-        final = main_clip
+    final = concatenate_videoclips(clips) if len(clips) > 1 else main_clip
 
     final.write_videofile(
         output_path,
@@ -744,7 +732,6 @@ def upload_video(script_id, video_path):
         video_data = f.read()
 
     file_name = f'videos/{script_id}.mp4'
-
     response = requests.post(
         f'{SUPABASE_URL}/storage/v1/object/revdlo-media/{file_name}',
         headers={
@@ -757,10 +744,8 @@ def upload_video(script_id, video_path):
         data=video_data,
         timeout=120
     )
-
     if not response.ok:
         raise Exception(f'Video upload failed: {response.text}')
-
     return f'{SUPABASE_URL}/storage/v1/object/public/revdlo-media/{file_name}'
 
 
@@ -777,36 +762,17 @@ def update_video_record(script_id, video_url):
 
 
 def run_pipeline_job():
-    """
-    Full automated pipeline:
-    1. Call council (auto-selects topic from queue)
-    2. Call voice + image simultaneously
-    3. Poll until both are ready
-    4. Assemble video
-    5. Publish to YouTube
-    6. Publish to Instagram
-    """
     print('[Pipeline] Starting automated pipeline run...')
 
-    image_path = None
-    audio_path = None
-    output_path = None
-    outro_sound_path = None
-    typewriter_sound_path = None
-    outro_bg_path = None
-    logo_path = None
+    image_path = audio_path = output_path = None
+    outro_sound_path = typewriter_sound_path = outro_bg_path = logo_path = None
 
     try:
-        # Step 1: Council
         print('[Pipeline] Step 1: Calling council worker...')
         council_res = requests.post(
             COUNCIL_URL,
-            headers={
-                'Authorization': f'Bearer {BEARER}',
-                'Content-Type': 'application/json'
-            },
-            json={},
-            timeout=60
+            headers={'Authorization': f'Bearer {BEARER}', 'Content-Type': 'application/json'},
+            json={}, timeout=60
         )
         council_res.raise_for_status()
         council_data = council_res.json()
@@ -817,33 +783,19 @@ def run_pipeline_job():
             return
 
         print(f'[Pipeline] Script generated: {script_id}')
-        print(f'[Pipeline] Setup: {council_data.get("script", {}).get("setup", "")}')
 
-        # Step 2: Voice + Image simultaneously
         print('[Pipeline] Step 2: Calling voice and image workers simultaneously...')
 
         def call_voice():
-            res = requests.post(
-                VOICE_URL,
-                headers={
-                    'Authorization': f'Bearer {BEARER}',
-                    'Content-Type': 'application/json'
-                },
-                json={'script_id': script_id},
-                timeout=120
-            )
+            res = requests.post(VOICE_URL,
+                                headers={'Authorization': f'Bearer {BEARER}', 'Content-Type': 'application/json'},
+                                json={'script_id': script_id}, timeout=120)
             return ('voice', res.status_code, res.text)
 
         def call_image():
-            res = requests.post(
-                IMAGE_URL,
-                headers={
-                    'Authorization': f'Bearer {BEARER}',
-                    'Content-Type': 'application/json'
-                },
-                json={'script_id': script_id},
-                timeout=120
-            )
+            res = requests.post(IMAGE_URL,
+                                headers={'Authorization': f'Bearer {BEARER}', 'Content-Type': 'application/json'},
+                                json={'script_id': script_id}, timeout=120)
             return ('image', res.status_code, res.text)
 
         with ThreadPoolExecutor(max_workers=2) as executor:
@@ -852,13 +804,9 @@ def run_pipeline_job():
                 label, status, body = future.result()
                 print(f'[Pipeline] {label} worker: {status} - {body[:200]}')
 
-        # Step 3: Poll for completion
         print('[Pipeline] Step 3: Polling for voice and image completion...')
-        max_wait = 300
-        poll_interval = 10
-        elapsed = 0
-        voice_ready = False
-        image_ready = False
+        max_wait, poll_interval, elapsed = 300, 10, 0
+        voice_ready = image_ready = False
 
         while elapsed < max_wait:
             try:
@@ -870,15 +818,13 @@ def run_pipeline_job():
                     break
             except Exception as e:
                 print(f'[Pipeline] Poll error: {e}')
-
             time.sleep(poll_interval)
             elapsed += poll_interval
 
         if not voice_ready or not image_ready:
-            print(f'[Pipeline] Timeout waiting for assets. voice: {voice_ready}, image: {image_ready}')
+            print(f'[Pipeline] Timeout. voice: {voice_ready}, image: {image_ready}')
             return
 
-        # Step 4: Assemble
         print('[Pipeline] Step 4: Assembling video...')
         video_record = get_video_record(script_id)
         script = get_script(script_id)
@@ -925,36 +871,31 @@ def run_pipeline_job():
             lines = json.loads(lines)
         setup_text = script.get('setup', None)
 
-        assemble_video(image_path, audio_path, lines, output_path, setup_text, outro_sound_path, typewriter_sound_path, outro_bg_path, logo_path)
+        assemble_video(image_path, audio_path, lines, output_path, setup_text,
+                       outro_sound_path, typewriter_sound_path, outro_bg_path, logo_path)
 
         video_url = upload_video(script_id, output_path)
         update_video_record(script_id, video_url)
-
         print(f'[Pipeline] Done. Video URL: {video_url}')
 
-        # Step 5: Publish to YouTube
         if YT_CLIENT_ID and YT_CLIENT_SECRET and YT_REFRESH_TOKEN:
             print('[Pipeline] Step 5: Publishing to YouTube...')
             publish_to_youtube_job(script_id)
         else:
-            print('[Pipeline] YouTube credentials not set. Skipping YouTube publish.')
+            print('[Pipeline] YouTube credentials not set. Skipping.')
 
-        # Step 6: Publish to Instagram
         if IG_ACCESS_TOKEN and IG_ACCOUNT_ID:
             print('[Pipeline] Step 6: Publishing to Instagram...')
             ig_media_id = publish_to_instagram_job(script_id)
             if ig_media_id:
                 print(f'[Pipeline] Instagram published: {ig_media_id}')
-            else:
-                print('[Pipeline] Instagram publish returned no media ID (check logs above).')
         else:
-            print('[Pipeline] Instagram credentials not set. Skipping Instagram publish.')
+            print('[Pipeline] Instagram credentials not set. Skipping.')
 
     except Exception as e:
         import traceback
         print(f'[Pipeline] Error: {e}')
         print(traceback.format_exc())
-
     finally:
         for path in [image_path, audio_path, output_path, outro_sound_path, typewriter_sound_path, outro_bg_path, logo_path]:
             if path and os.path.exists(path):
@@ -975,10 +916,8 @@ def health():
 def run_pipeline():
     if not check_auth(request):
         return jsonify({'error': 'Unauthorized'}), 401
-
     thread = threading.Thread(target=run_pipeline_job, daemon=True)
     thread.start()
-
     return jsonify({
         'status': 'Pipeline started',
         'message': 'Council → Voice + Image → Assembly → YouTube → Instagram running in background'
@@ -989,49 +928,28 @@ def run_pipeline():
 def publish():
     if not check_auth(request):
         return jsonify({'error': 'Unauthorized'}), 401
-
     data = request.get_json()
     script_id = data.get('script_id')
-
     if not script_id:
         return jsonify({'error': 'script_id is required'}), 400
-
     publish_to_youtube_job(script_id)
-
-    return jsonify({
-        'status': 'Publish complete',
-        'script_id': script_id
-    }), 200
+    return jsonify({'status': 'Publish complete', 'script_id': script_id}), 200
 
 
 @app.route('/publish-instagram', methods=['POST'])
 def publish_instagram():
     if not check_auth(request):
         return jsonify({'error': 'Unauthorized'}), 401
-
     data = request.get_json() or {}
     script_id = data.get('script_id')
-
     if not script_id:
         return jsonify({'error': 'script_id is required'}), 400
-
     if not IG_ACCESS_TOKEN or not IG_ACCOUNT_ID:
-        return jsonify({'error': 'IG_ACCESS_TOKEN or IG_ACCOUNT_ID not set in Render environment'}), 500
-
+        return jsonify({'error': 'IG_ACCESS_TOKEN or IG_ACCOUNT_ID not set'}), 500
     media_id = publish_to_instagram_job(script_id)
-
     if media_id:
-        return jsonify({
-            'success': True,
-            'media_id': media_id,
-            'script_id': script_id
-        }), 200
-    else:
-        return jsonify({
-            'success': False,
-            'error': 'Instagram publish failed — check Render logs',
-            'script_id': script_id
-        }), 500
+        return jsonify({'success': True, 'media_id': media_id, 'script_id': script_id}), 200
+    return jsonify({'success': False, 'error': 'Instagram publish failed', 'script_id': script_id}), 500
 
 
 @app.route('/assemble', methods=['POST'])
@@ -1041,13 +959,10 @@ def assemble():
 
     data = request.get_json()
     script_id = data.get('script_id')
-
     if not script_id:
         return jsonify({'error': 'script_id is required'}), 400
 
-    image_path = None
-    audio_path = None
-    output_path = None
+    image_path = audio_path = output_path = None
 
     try:
         video_record = get_video_record(script_id)
@@ -1087,7 +1002,7 @@ def assemble():
         if outro_bg_url:
             try:
                 outro_bg_path = download_file(outro_bg_url, '.jpg')
-                print(f'Outro bg downloaded: {outro_bg_path}, exists: {os.path.exists(outro_bg_path) if outro_bg_path else False}')
+                print(f'Outro bg downloaded: {outro_bg_path}')
             except Exception as e:
                 print(f'Outro bg download failed: {e}')
         else:
@@ -1105,22 +1020,18 @@ def assemble():
 
         lines = script.get('lines', [])
         if isinstance(lines, str):
-            import json
             lines = json.loads(lines)
         setup_text = script.get('setup', None)
         print(f"Setup text: {setup_text}")
         print(f"Lines: {lines}")
 
-        assemble_video(image_path, audio_path, lines, output_path, setup_text, outro_sound_path, typewriter_sound_path, outro_bg_path, logo_path)
+        assemble_video(image_path, audio_path, lines, output_path, setup_text,
+                       outro_sound_path, typewriter_sound_path, outro_bg_path, logo_path)
 
         video_url = upload_video(script_id, output_path)
         update_video_record(script_id, video_url)
 
-        return jsonify({
-            'success': True,
-            'script_id': script_id,
-            'video_url': video_url
-        })
+        return jsonify({'success': True, 'script_id': script_id, 'video_url': video_url})
 
     except Exception as e:
         import traceback
