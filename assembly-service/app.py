@@ -519,11 +519,11 @@ def build_caption_clips(setup_text, lines, voice_duration, video_width, video_he
             txt_clip = (TextClip(
                 text,
                 fontsize=34,
-                color='rgb(245,228,188)',
+                color='#F5E4BC',
                 font='DejaVu-Serif-Bold',
                 method='caption',
                 size=(video_width - 80, None),
-                stroke_color='rgb(30,10,2)',
+                stroke_color='#1E0A02',
                 stroke_width=3,
                 align='center'
             )
