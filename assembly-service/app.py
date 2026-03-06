@@ -44,57 +44,11 @@ def check_auth(req):
     return auth == f'Bearer {COUNCIL_SECRET}'
 
 
-# ─── Ken Burns slow zoom ───────────────────────────────────────────────────────
-
-def apply_ken_burns(clip, target_w, target_h, zoom_to=1.08):
-    """Frame-by-frame zoom using scipy zoom — avoids MoviePy resize fx entirely.
-    Grows from 1.0x to zoom_to, center-crops each frame back to target dimensions."""
-    duration = clip.duration
-    if duration < 0.1:
-        return clip
-
-    def zoom_frame(get_frame, t):
-        frame = get_frame(t)
-        if duration < 0.01:
-            return frame
-        progress = min(t / duration, 1.0)
-        scale = 1.0 + (zoom_to - 1.0) * progress
-        if scale <= 1.001:
-            return frame
-        h, w = frame.shape[:2]
-        new_h = int(h * scale)
-        new_w = int(w * scale)
-        if new_h < 1 or new_w < 1:
-            return frame
-        # scipy zoom is fast and reliable on CPU, no PIL ANTIALIAS issues
-        try:
-            from scipy.ndimage import zoom as scipy_zoom
-            # zoom each channel separately to avoid color channel issues
-            zoomed = np.stack([
-                scipy_zoom(frame[:, :, c], (new_h / h, new_w / w), order=1)
-                for c in range(frame.shape[2])
-            ], axis=2).astype(np.uint8)
-        except Exception:
-            # PIL fallback
-            img = PIL.Image.fromarray(frame)
-            img = img.resize((new_w, new_h), PIL.Image.LANCZOS)
-            zoomed = np.array(img)
-        # Center crop back to original target dimensions
-        y0 = max(0, (new_h - h) // 2)
-        x0 = max(0, (new_w - w) // 2)
-        y1 = min(y0 + h, zoomed.shape[0])
-        x1 = min(x0 + w, zoomed.shape[1])
-        result = zoomed[y0:y1, x0:x1]
-        # Ensure exact output shape
-        if result.shape[0] != h or result.shape[1] != w:
-            out = np.zeros((h, w, frame.shape[2]), dtype=np.uint8)
-            rh = min(result.shape[0], h)
-            rw = min(result.shape[1], w)
-            out[:rh, :rw] = result[:rh, :rw]
-            return out
-        return result
-
-    return clip.fl(zoom_frame)
+# ─── Static zoom (Ken Burns removed — clip.fl breaks compositing on Render CPU) ─
+# Animated zoom will be revisited once image rendering is confirmed stable.
+# For now: bake a 1.08x static zoom into the crop so face is tight on screen.
+# No time-varying transforms. No fl(). Pure ImageClip → crop pipeline.
+# (Nothing to call here — zoom is baked into assemble_video crop step below.)
 
 
 # ─── YouTube helpers ───────────────────────────────────────────────────────────
@@ -490,19 +444,25 @@ def build_caption_panel(video_width, video_height, duration):
     panel_h = 260
     panel_y = video_height - panel_h
 
-    # Warm leather brown — genuinely visible, not black
-    leather = (ColorClip(size=(video_width, panel_h), color=(110, 58, 18))
-               .set_opacity(0.82)
-               .set_position((0, panel_y))
-               .set_duration(duration))
+    # Dark base — enough opacity to make white text readable
+    base = (ColorClip(size=(video_width, panel_h), color=(20, 10, 5))
+            .set_opacity(0.78)
+            .set_position((0, panel_y))
+            .set_duration(duration))
 
-    # Amber/gold accent line at top edge — 6px, bright
-    accent = (ColorClip(size=(video_width, 6), color=(210, 145, 40))
-              .set_opacity(0.95)
-              .set_position((0, panel_y))
+    # Warm amber/brown top strip — visible identity band
+    top_strip = (ColorClip(size=(video_width, 40), color=(140, 75, 20))
+                 .set_opacity(0.90)
+                 .set_position((0, panel_y))
+                 .set_duration(duration))
+
+    # Amber/gold accent line above the strip
+    accent = (ColorClip(size=(video_width, 4), color=(210, 145, 40))
+              .set_opacity(1.0)
+              .set_position((0, panel_y - 2))
               .set_duration(duration))
 
-    return [leather, accent]
+    return [base, top_strip, accent]
 
 
 def build_caption_clips(setup_text, lines, voice_duration, video_width, video_height):
@@ -549,7 +509,7 @@ def build_caption_clips(setup_text, lines, voice_duration, video_width, video_he
         try:
             txt_clip = (TextClip(
                 text,
-                fontsize=40,
+                fontsize=34,
                 color='white',
                 font='DejaVu-Serif-Bold',
                 method='caption',
@@ -685,15 +645,16 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None,
     total_duration = voice_duration + post_hold
     image_clip = image_clip.set_duration(total_duration)
 
-    # ── Ken Burns slow zoom ──────────────────────────────────────────────────
-    print('[Assemble] Applying Ken Burns zoom...')
-    image_clip = apply_ken_burns(image_clip, target_width, target_height)
+    # ── Static zoom baked into crop above (1.2x scale = tight face framing) ──
+    # Ken Burns animated zoom removed — clip.fl() breaks CompositeVideoClip
+    # on Render's CPU environment. Will revisit with pre-rendered approach.
 
     # ── Leather panel + HUD — only during voice, not during hold ────────────
     panel_layers = build_caption_panel(target_width, target_height, voice_duration)
 
     # ── Captions: setup text → line 1 → line 2 ──────────────────────────────
-    caption_clips = build_caption_clips(setup_text, lines, voice_duration, target_width, target_height)
+    # Setup text shown on card — captions for line 1 and line 2 only
+    caption_clips = build_caption_clips(None, lines, voice_duration, target_width, target_height)
 
     # ── Compose main layers (no watermark) ──────────────────────────────────
     main_layers = [image_clip] + panel_layers + caption_clips
