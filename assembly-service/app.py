@@ -637,17 +637,20 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
     image_clip = ImageClip(image_path).set_duration(duration)
 
     img_w, img_h = image_clip.size
-    scale = max(target_width / img_w, target_height / img_h)
+    scale = max(target_width / img_w, target_height / img_h) * 1.2
     new_w = int(img_w * scale)
     new_h = int(img_h * scale)
+
     image_clip = image_clip.resize((new_w, new_h))
+
+    y_center = new_h * 0.38
 
     image_clip = crop(
         image_clip,
         width=target_width,
         height=target_height,
         x_center=new_w / 2,
-        y_center=new_h / 2
+        y_center=y_center
     )
 
     from moviepy.editor import ColorClip
