@@ -417,12 +417,12 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None,
         txt_clip = (TextClip(
             setup_text,
             fontsize=34,
-            color='white',
+            color='#F5E4BC',
             font='DejaVu-Serif-Bold',
             method='caption',
             size=(video_width - 80, None),
-            stroke_color='black',
-            stroke_width=2,
+            stroke_color='#1E0A02',
+            stroke_width=3,
             align='center'
         )
         .set_position(('center', text_y))
