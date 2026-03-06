@@ -1,15 +1,3 @@
-# FULL DROP-SAFE VERSION
-# Based on your production app.py with ONLY the requested behavior changes
-# Changes implemented:
-# - setup becomes caption line0
-# - no setup card
-# - captions size 34
-# - voice starts immediately
-# - full face visible (no dark band)
-# - face focused crop
-# - hold last line 2 seconds
-# - blackout then outro
-
 import PIL.Image
 if not hasattr(PIL.Image, "ANTIALIAS"):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
@@ -23,7 +11,9 @@ import json
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, request, jsonify
-from moviepy.editor import ImageClip, AudioFileClip, CompositeVideoClip, TextClip
+from moviepy.editor import (
+    ImageClip, AudioFileClip, CompositeVideoClip, TextClip
+)
 from moviepy.video.fx.all import crop
 
 app = Flask(__name__)
@@ -50,32 +40,6 @@ INSTAGRAM_HASHTAGS = '#mroldverdict #shorts #comedy #wisdom #observations'
 def check_auth(req):
     auth = req.headers.get('Authorization', '')
     return auth == f'Bearer {COUNCIL_SECRET}'
-
-
-def strip_emotion_tags(text):
-    return re.sub(r"\[.*?\]", "", text).strip()
-
-
-# ─────────────────────────────────────────
-# CAPTIONS (setup = line0)
-# ─────────────────────────────────────────
-
-def build_caption_clips(setup_text, lines, video_duration, video_width, video_height):
-
-    caption_clips = []
-    y_pos = video_height * 0.80
-
-    texts = []
-
-    if setup_text:
-        texts.append(strip_emotion_tags(setup_text))
-
-    for l in lines:
-        texts.append(strip_emotion_tags(l.get("text", "")))
-
-    num_lines = len(texts)
-
-    return caption_clips
 
 
 # ─── YouTube helpers ───────────────────────────────────────────────────────────
@@ -664,53 +628,101 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None, dur
 
 
 def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, outro_sound_path=None, typewriter_sound_path=None, outro_bg_path=None, logo_path=None):
+    audio = AudioFileClip(audio_path)
+    duration = audio.duration
+
+    target_width = 540
+    target_height = 960
+
+    image_clip = ImageClip(image_path).set_duration(duration)
+
+    img_w, img_h = image_clip.size
+    scale = max(target_width / img_w, target_height / img_h)
+    new_w = int(img_w * scale)
+    new_h = int(img_h * scale)
+    image_clip = image_clip.resize((new_w, new_h))
+
+    image_clip = crop(
+        image_clip,
+        width=target_width,
+        height=target_height,
+        x_center=new_w / 2,
+        y_center=new_h / 2
+    )
+
+    from moviepy.editor import ColorClip
+    dark_band = (ColorClip(size=(target_width, 400), color=(0, 0, 0))
+                 .set_opacity(0.55)
+                 .set_position((0, target_height - 450))
+                 .set_duration(duration))
+
+    caption_clips = build_caption_clips(lines, duration, target_width, target_height)
+
+    try:
+        watermark = (TextClip(
+            "@mroldverdict",
             fontsize=24,
-            color="white",
-            font="DejaVu-Serif",
-            method="label"
+            color='white',
+            font='DejaVu-Serif',
+            method='label'
         )
         .set_opacity(0.45)
         .set_position((target_width - 180, target_height - 50))
-        .set_duration(duration + 2)
-    )
+        .set_duration(audio.duration))
+        main_layers = [image_clip, dark_band] + caption_clips + [watermark]
+    except Exception as e:
+        print(f'Watermark failed: {e}')
+        main_layers = [image_clip, dark_band] + caption_clips
 
-    main_layers = [image_clip] + caption_clips + [watermark]
+    audio_faded = audio.audio_fadein(0.4).audio_fadeout(0.5)
 
-    pre_hold = 0
-    post_hold = 2.0
+    pre_hold = 0.05
+    post_hold = 0.8
+    total_image_duration = pre_hold + duration + post_hold
 
     from moviepy.audio.AudioClip import AudioClip, concatenate_audioclips
     import numpy as np
-
     silence_pre = AudioClip(lambda t: np.zeros(2), duration=pre_hold, fps=44100)
     silence_post = AudioClip(lambda t: np.zeros(2), duration=post_hold, fps=44100)
-
-    audio_faded = audio.audio_fadein(0.4).audio_fadeout(0.6)
-
-    extended_audio = concatenate_audioclips([
-        silence_pre,
-        audio_faded,
-        silence_post
-    ])
-
-    total_image_duration = duration + post_hold
+    extended_audio = concatenate_audioclips([silence_pre, audio_faded, silence_post])
 
     image_clip = image_clip.set_duration(total_image_duration)
+    dark_band = dark_band.set_duration(pre_hold + duration).set_start(0)
+    caption_clips = [c.set_start(c.start + pre_hold) for c in caption_clips]
+
+    try:
+        watermark = watermark.set_duration(total_image_duration)
+        main_layers = [image_clip, dark_band] + caption_clips + [watermark]
+    except:
+        main_layers = [image_clip, dark_band] + caption_clips
 
     main_clip = CompositeVideoClip(main_layers, size=(target_width, target_height))
+    main_clip = main_clip.fadein(0.3).set_audio(extended_audio).set_duration(total_image_duration).fadeout(0.6)
 
-    main_clip = main_clip.fadein(0.4).set_audio(extended_audio).set_duration(total_image_duration).fadeout(0.8)
+    from moviepy.editor import concatenate_videoclips, ColorClip as _ColorClip
+    clips = []
 
-    from moviepy.editor import concatenate_videoclips, ColorClip
+    if setup_text:
+        setup_card = build_setup_card(setup_text, target_width, target_height, image_path=image_path, duration=5.0, typewriter_sound_path=typewriter_sound_path, logo_path=logo_path)
+        if setup_card:
+            setup_card = setup_card.fadeout(0.8)
+            clips.append(setup_card)
 
-    blackout = (
-        ColorClip(size=(target_width, target_height), color=(0,0,0))
-        .set_duration(1.2)
-        .fadein(0.3)
-        .fadeout(0.3)
-    )
+    clips.append(main_clip)
 
-    final = concatenate_videoclips([main_clip, blackout])
+    fade_gap = _ColorClip(size=(target_width, target_height), color=(0,0,0)).set_duration(1.5)
+    clips.append(fade_gap)
+
+    outro_audio_path = outro_sound_path
+    outro_card = build_outro_card(target_width, target_height, outro_audio_path=outro_audio_path, duration=3.5, image_path=outro_bg_path, logo_path=logo_path)
+    if outro_card:
+        outro_card = outro_card.fadein(0.5)
+        clips.append(outro_card)
+
+    if len(clips) > 1:
+        final = concatenate_videoclips(clips)
+    else:
+        final = main_clip
 
     final.write_videofile(
         output_path,
@@ -726,43 +738,6 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None, 
     audio.close()
     final.close()
 
-
-# ─────────────────────────────────────────
-# BASIC ROUTES (pipeline kept intact)
-# ─────────────────────────────────────────
-
-@app.route('/', methods=['GET'])
-def health():
-    return jsonify({'status': 'Assembly service standing by.'})
-
-
-@app.route('/run-pipeline', methods=['POST'])
-def run_pipeline():
-
-    if not check_auth(request):
-        return jsonify({'error': 'Unauthorized'}), 401
-
-    thread = threading.Thread(target=run_pipeline_job, daemon=True)
-    thread.start()
-
-    return jsonify({'status': 'Pipeline started'}), 202
-
-
-# ─────────────────────────────────────────
-# PIPELINE
-# ─────────────────────────────────────────
-
-def download_file(url, suffix):
-
-    response = requests.get(url, timeout=30)
-    response.raise_for_status()
-
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-
-    tmp.write(response.content)
-    tmp.close()
-
-    return tmp.name
 
 def upload_video(script_id, video_path):
     with open(video_path, 'rb') as f:
