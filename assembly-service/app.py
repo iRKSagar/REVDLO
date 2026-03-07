@@ -1170,6 +1170,66 @@ def assemble():
                     'message': 'Poll /video-status for completion. Use /publish to publish manually.'}), 202
 
 
+
+
+@app.route('/videos/list', methods=['GET', 'OPTIONS'])
+def videos_list():
+    if request.method == 'OPTIONS':
+        return '', 204, {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Authorization,Content-Type',
+            'Access-Control-Allow-Methods': 'GET,OPTIONS'
+        }
+    if not check_auth(request):
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        # Fetch all videos that have a video_url, joined with scripts for setup text + published flag
+        res = requests.get(
+            f"{SUPABASE_URL}/rest/v1/videos"
+            f"?select=id,script_id,video_url,created_at,scripts(setup,published,category)"
+            f"&video_url=not.is.null"
+            f"&order=created_at.desc",
+            headers={'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
+        )
+        rows = res.json()
+        return jsonify({'videos': rows})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/videos/delete', methods=['POST', 'OPTIONS'])
+def videos_delete():
+    if request.method == 'OPTIONS':
+        return '', 204, {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Authorization,Content-Type',
+            'Access-Control-Allow-Methods': 'POST,OPTIONS'
+        }
+    if not check_auth(request):
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = request.get_json() or {}
+    script_id = data.get('script_id')
+    if not script_id:
+        return jsonify({'error': 'script_id required'}), 400
+    try:
+        # 1. Delete from Supabase storage
+        storage_path = f"videos/{script_id}.mp4"
+        requests.delete(
+            f"{SUPABASE_URL}/storage/v1/object/revdlo-media/{storage_path}",
+            headers={'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
+        )
+        print(f"[delete] Storage deleted: {storage_path}")
+        # 2. Delete videos table row
+        requests.delete(
+            f"{SUPABASE_URL}/rest/v1/videos?script_id=eq.{script_id}",
+            headers={'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}',
+                     'Prefer': 'return=minimal'}
+        )
+        print(f"[delete] Videos row deleted: {script_id}")
+        return jsonify({'deleted': True, 'script_id': script_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
