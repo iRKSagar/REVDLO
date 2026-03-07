@@ -378,14 +378,26 @@ function VideosTab({ onReassemble, pipelineAdd }) {
         </div>
       )}
 
-      {/* Select all row */}
+      {/* Select row */}
       {videos.length > 0 && (
-        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12,
-          padding:"6px 4px", borderBottom:"1px solid #1a1208" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12,
+          padding:"6px 4px", borderBottom:"1px solid #1a1208", flexWrap:"wrap" }}>
           <input type="checkbox" checked={allSelected} onChange={toggleAll} style={checkStyle} />
-          <span style={{ fontSize:11, color:"#6a4820", cursor:"pointer" }} onClick={toggleAll}>
-            {allSelected ? "Deselect all" : `Select all (${videos.length})`}
+          <span style={{ fontSize:11, color:"#6a4820", cursor:"pointer", marginRight:6 }} onClick={toggleAll}>
+            {allSelected ? "Deselect all" : `All (${videos.length})`}
           </span>
+          <button onClick={() => setSelected(new Set(videos.filter(v => !v.scripts?.published).map(v => v.script_id)))}
+            style={{ padding:"3px 10px", borderRadius:6, border:"1px solid #3a3010",
+              background:"#1a1400", color:"#d4a017", fontFamily:"Georgia,serif",
+              fontSize:11, cursor:"pointer" }}>
+            Unpublished ({videos.filter(v => !v.scripts?.published).length})
+          </button>
+          <button onClick={() => setSelected(new Set(videos.filter(v => v.scripts?.published).map(v => v.script_id)))}
+            style={{ padding:"3px 10px", borderRadius:6, border:"1px solid #1a3a1a",
+              background:"#0a1a0a", color:"#5cb85c", fontFamily:"Georgia,serif",
+              fontSize:11, cursor:"pointer" }}>
+            Published ({videos.filter(v => v.scripts?.published).length})
+          </button>
         </div>
       )}
 
