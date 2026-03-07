@@ -21,6 +21,21 @@ from moviepy.audio.AudioClip import AudioClip, concatenate_audioclips
 
 app = Flask(__name__)
 
+@app.after_request
+def add_cors(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type'
+    return response
+
+@app.route('/', methods=['OPTIONS'])
+@app.route('/assemble', methods=['OPTIONS'])
+@app.route('/publish', methods=['OPTIONS'])
+@app.route('/publish-instagram', methods=['OPTIONS'])
+@app.route('/run-pipeline', methods=['OPTIONS'])
+def options_handler():
+    return '', 204
+
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 COUNCIL_SECRET = os.environ.get('COUNCIL_SECRET')
@@ -52,8 +67,10 @@ def render_leather_panel(video_width, panel_h, leather_path):
     """Load real leather texture, darken center for text readability,
     keep ornate border/corners fully visible. Returns numpy RGBA array."""
     try:
+        print(f'[leather panel] loading from {leather_path}')
         src = PIL.Image.open(leather_path).convert('RGBA')
         panel_img = src.resize((video_width, panel_h), PIL.Image.LANCZOS)
+        print(f'[leather panel] source size: {src.size}, resized to: {panel_img.size}')
 
         overlay = PIL.Image.new('RGBA', (video_width, panel_h), (0, 0, 0, 0))
         od = ImageDraw.Draw(overlay)
@@ -417,11 +434,11 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None,
         txt_clip = (TextClip(
             setup_text,
             fontsize=34,
-            color='#F5E4BC',
+            color='white',
             font='DejaVu-Serif-Bold',
             method='caption',
             size=(video_width - 80, None),
-            stroke_color='#1E0A02',
+            stroke_color='black',
             stroke_width=3,
             align='center'
         )
@@ -519,11 +536,11 @@ def build_caption_clips(setup_text, lines, voice_duration, video_width, video_he
             txt_clip = (TextClip(
                 text,
                 fontsize=34,
-                color='#F5E4BC',
+                color='white',
                 font='DejaVu-Serif-Bold',
                 method='caption',
                 size=(video_width - 80, None),
-                stroke_color='#1E0A02',
+                stroke_color='black',
                 stroke_width=3,
                 align='center'
             )
@@ -948,24 +965,14 @@ def publish_instagram():
     return jsonify({'success': False, 'error': 'Instagram publish failed', 'script_id': script_id}), 500
 
 
-@app.route('/assemble', methods=['POST'])
-def assemble():
-    if not check_auth(request):
-        return jsonify({'error': 'Unauthorized'}), 401
-
-    data = request.get_json()
-    script_id = data.get('script_id')
-    if not script_id:
-        return jsonify({'error': 'script_id is required'}), 400
-
+def assemble_job(script_id):
+    """Background thread: assembles video and auto-publishes to YouTube."""
     image_path = audio_path = output_path = None
-
     try:
         video_record = get_video_record(script_id)
         script = get_script(script_id)
 
         outro_sound_url = get_outro_sound_url(SUPABASE_URL, SUPABASE_KEY)
-        # typewriter_sound_url no longer used — sound removed
         outro_bg_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'outro_bg_url')
         logo_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'logo_url')
 
@@ -973,47 +980,35 @@ def assemble():
         audio_url = video_record.get('voice_file_url')
 
         if not image_url:
-            return jsonify({'error': 'No image found for this script'}), 400
+            print(f"[assemble_job] No image for {script_id}"); return
         if not audio_url:
-            return jsonify({'error': 'No audio found for this script'}), 400
+            print(f"[assemble_job] No audio for {script_id}"); return
 
         image_path = download_file(image_url, '.jpg')
         audio_path = download_file(audio_url, '.mp3')
 
         outro_sound_path = None
         if outro_sound_url:
-            try:
-                outro_sound_path = download_file(outro_sound_url, '.mp3')
-            except Exception as e:
-                print(f'Outro sound download failed: {e}')
+            try: outro_sound_path = download_file(outro_sound_url, '.mp3')
+            except Exception as e: print(f'Outro sound download failed: {e}')
 
-        typewriter_sound_path = None  # sound removed
+        typewriter_sound_path = None
 
         outro_bg_path = None
         if outro_bg_url:
-            try:
-                outro_bg_path = download_file(outro_bg_url, '.jpg')
-                print(f'Outro bg downloaded: {outro_bg_path}')
-            except Exception as e:
-                print(f'Outro bg download failed: {e}')
-        else:
-            print('Outro bg URL not found in settings')
+            try: outro_bg_path = download_file(outro_bg_url, '.jpg')
+            except Exception as e: print(f'Outro bg download failed: {e}')
 
         logo_path = None
         if logo_url:
-            try:
-                logo_path = download_file(logo_url, '.png')
-                print(f'Logo downloaded: {logo_path}')
-            except Exception as e:
-                print(f'Logo download failed: {e}')
+            try: logo_path = download_file(logo_url, '.png')
+            except Exception as e: print(f'Logo download failed: {e}')
 
         leather_panel_url = get_setting(SUPABASE_URL, SUPABASE_KEY, 'leather_panel_url')
         leather_panel_path = None
         if leather_panel_url:
-            try:
-                leather_panel_path = download_file(leather_panel_url, '.png')
-            except Exception as e:
-                print(f'Leather panel download failed: {e}')
+            try: leather_panel_path = download_file(leather_panel_url, '.png')
+            except Exception as e: print(f'Leather panel download failed: {e}')
 
         output_path = tempfile.mktemp(suffix='.mp4')
 
@@ -1021,8 +1016,6 @@ def assemble():
         if isinstance(lines, str):
             lines = json.loads(lines)
         setup_text = script.get('setup', None)
-        print(f"Setup text: {setup_text}")
-        print(f"Lines: {lines}")
 
         assemble_video(image_path, audio_path, lines, output_path, setup_text,
                        outro_sound_path, typewriter_sound_path, outro_bg_path, logo_path,
@@ -1030,22 +1023,33 @@ def assemble():
 
         video_url = upload_video(script_id, output_path)
         update_video_record(script_id, video_url)
+        print(f"[assemble_job] Done: {video_url}")
 
-        return jsonify({'success': True, 'script_id': script_id, 'video_url': video_url})
+        publish_to_youtube_job(script_id)
 
     except Exception as e:
         import traceback
-        print(f"Assembly error: {str(e)}")
+        print(f"[assemble_job] Error: {e}")
         print(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
-
     finally:
         for path in [image_path, audio_path, output_path]:
             if path and os.path.exists(path):
-                try:
-                    os.unlink(path)
-                except Exception:
-                    pass
+                try: os.unlink(path)
+                except Exception: pass
+
+
+@app.route('/assemble', methods=['POST'])
+def assemble():
+    if not check_auth(request):
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = request.get_json()
+    script_id = data.get('script_id')
+    if not script_id:
+        return jsonify({'error': 'script_id is required'}), 400
+    thread = threading.Thread(target=assemble_job, args=(script_id,), daemon=True)
+    thread.start()
+    return jsonify({'status': 'Assembly started', 'script_id': script_id,
+                    'message': 'Poll Supabase videos table for video_url'}), 202
 
 
 if __name__ == '__main__':
