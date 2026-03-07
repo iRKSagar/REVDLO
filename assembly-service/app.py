@@ -192,6 +192,59 @@ def mark_script_published(script_id, youtube_video_id):
     )
 
 
+
+def post_pinned_comment(yt_video_id, comment_text):
+    """Post a comment on a YouTube video and pin it."""
+    try:
+        access_token = get_youtube_access_token()
+
+        # 1. Insert comment thread
+        insert_res = requests.post(
+            'https://www.googleapis.com/youtube/v3/commentThreads?part=snippet',
+            headers={
+                'Authorization': f'Bearer {access_token}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'snippet': {
+                    'videoId': yt_video_id,
+                    'topLevelComment': {
+                        'snippet': {
+                            'textOriginal': comment_text
+                        }
+                    }
+                }
+            },
+            timeout=30
+        )
+        insert_res.raise_for_status()
+        thread_data = insert_res.json()
+        comment_id = thread_data['snippet']['topLevelComment']['id']
+        print(f'[Publish] Comment posted: {comment_id}')
+
+        # 2. Pin the comment
+        pin_res = requests.post(
+            'https://www.googleapis.com/youtube/v3/comments?part=snippet',
+            headers={
+                'Authorization': f'Bearer {access_token}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'id': comment_id,
+                'snippet': {
+                    'moderationStatus': 'heldForReview',
+                    'isPinned': True
+                }
+            },
+            timeout=30
+        )
+        # Pin endpoint returns 204 or the updated comment — either is fine
+        print(f'[Publish] Comment pinned. Status: {pin_res.status_code}')
+    except Exception as e:
+        # Non-fatal — video is already published
+        print(f'[Publish] Pinned comment failed (non-fatal): {e}')
+
+
 def publish_to_youtube_job(script_id):
     video_path = None
     try:
@@ -228,6 +281,13 @@ def publish_to_youtube_job(script_id):
         yt_id = upload_to_youtube(video_path, title, description, tags)
         print(f'[Publish] YouTube video ID: {yt_id}')
         mark_script_published(script_id, yt_id)
+
+        # Post and pin comment if council generated one
+        pinned_comment = script.get('pinned_comment')
+        if pinned_comment and isinstance(pinned_comment, str) and pinned_comment.strip():
+            print(f'[Publish] Posting pinned comment: {pinned_comment[:60]}…')
+            post_pinned_comment(yt_id, pinned_comment.strip())
+
         print(f'[Publish] Done. https://youtube.com/shorts/{yt_id}')
 
     except Exception as e:
