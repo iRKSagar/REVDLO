@@ -98,30 +98,15 @@ async function callVoiceAndImage(sid, add) {
 
 async function callAssemble(sid, add) {
   add("Triggering assembly…", "step");
-  // /run-pipeline returns 202 immediately — Render assembles in background
-  const r = await fetch(`${RENDER}/run-pipeline`, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) });
-  if (!r.ok) throw new Error(`Assembly trigger failed: HTTP ${r.status}`);
-  add("Assembly started ✓ — polling Supabase for completion…", "success");
-
-  // Poll Supabase every 10s until video_url appears (max 4 min)
-  const SUPA = "https://cfxpgtrtctujaxdoqfds.supabase.co/rest/v1/videos";
-  const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmeHBndHJ0Y3R1amF4ZG9xZmRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDU3NTYzNzIsImV4cCI6MjAyMTMzMjM3Mn0.qvq5NWpnZxlv9n0tPBKRIqRDIMITRgGaXe1I6_hSMuI";
-  for (let i = 0; i < 24; i++) {
-    await new Promise(res => setTimeout(res, 10000));
-    add(`Waiting for video… (${(i+1)*10}s)`, "info");
-    try {
-      const pr = await fetch(`${SUPA}?script_id=eq.${sid}&select=video_url`, {
-        headers: { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}` }
-      });
-      const rows = await pr.json();
-      if (rows?.[0]?.video_url) {
-        add(`Video ready ✓`, "success");
-        return rows[0];
-      }
-    } catch(e) { /* keep polling */ }
+  const r = await fetch(`${RENDER}/assemble`, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`Assembly trigger failed HTTP ${r.status}: ${t.slice(0,200)}`);
   }
-  throw new Error("Assembly timed out after 4 minutes — check Render logs");
+  add("Assembly running in background ✓", "success");
+  add("Video will be published to YouTube automatically in ~3 minutes.", "info");
 }
+
 
 async function callPublish(sid, add) {
   add("Publishing to YouTube…", "step");
@@ -268,9 +253,9 @@ function App() {
       await callVoiceAndImage(sid, add);
       await wakeRender(add);
       await callAssemble(sid, add);
-      await callPublish(sid, add);
+      // Publish is triggered automatically by assemble_job on Render
       setStatus("success");
-      add("Pipeline complete ✓", "success");
+      add("Pipeline complete ✓ — YouTube + Instagram publish running in background.", "success");
     } catch(e) {
       add(`Error: ${e.message}`, "error");
       setStatus("error");
