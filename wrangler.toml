@@ -2,8 +2,5 @@ name = "revdlo1"
 main = "council-worker/src/index.js"
 compatibility_date = "2024-01-01"
 
-[triggers]
-crons = ["0 11 * * *", "0 20 * * *"]
-
 [vars]
 WORKER_DOMAIN = "revdlo1.rkinfoarch.workers.dev"
