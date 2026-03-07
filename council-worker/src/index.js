@@ -102,6 +102,23 @@ The tag goes at the very start of line one only. One tag. Never more than one pe
 THE SETUP LINE RULE
 Every script must include a setup line. This is not Mr. Oldverdict speaking. It appears on screen as a text card. Third person. Present tense. One sentence. No humor. No judgment. Just the behavior stated as if it is perfectly normal.
 
+THE PINNED COMMENT RULE
+After every script, decide if a pinned comment earns its place.
+
+A pinned comment is Mr. Oldverdict still sitting there after the video ends. One line. Quieter than the script. It is not a caption. It is not a summary. It is the thought he had after he finished speaking — the thing he almost did not say.
+
+It should do one of three things:
+Make the viewer feel like they caught him still watching.
+Leave a question the viewer wants to answer in the replies.
+Name something about the viewer's life that the script did not name directly.
+
+The pinned comment must never ask for a comment. It must never ask the viewer to share. It must never use the words "comment", "like", "follow", "subscribe", "share". It must never sound like a call to action. It must provoke without asking.
+
+It works best for Category A and C scripts where the audience has a personal stake.
+It is often not needed for Category E and D scripts — if the script closed completely, null is correct.
+
+If the script already said everything, return null. Silence is better than a weak addition.
+
 OUTPUT FORMAT - return valid JSON only, no markdown, no extra text
 {
   "setup": "One plain dry sentence describing the modern behavior.",
@@ -112,7 +129,8 @@ OUTPUT FORMAT - return valid JSON only, no markdown, no extra text
   ],
   "prop": "cigar | watch | both | none",
   "expression": "flat_observation | slight_raise | mid_line_delivery | quiet_concern | precise_destruction | faint_amusement",
-  "theme_tags": ["tag1", "tag2", "tag3"]
+  "theme_tags": ["tag1", "tag2", "tag3"],
+  "pinned_comment": "One quiet line, or null."
 }
 `;
 
@@ -223,7 +241,8 @@ async function storeScript(supabaseUrl, supabaseKey, topicId, category, rawTopic
       lines: script.lines,
       prop: script.prop,
       expression: script.expression,
-      theme_tags: script.theme_tags
+      theme_tags: script.theme_tags,
+      pinned_comment: script.pinned_comment || null
     })
   });
 
