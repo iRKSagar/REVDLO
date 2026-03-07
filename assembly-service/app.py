@@ -1078,8 +1078,8 @@ def publish_instagram():
     return jsonify({'success': False, 'error': 'Instagram publish failed', 'script_id': script_id}), 500
 
 
-def assemble_job(script_id):
-    """Background thread: assembles video and auto-publishes to YouTube."""
+def assemble_job(script_id, auto_publish=False):
+    """Background thread: assembles video. Publishes only if auto_publish=True."""
     image_path = audio_path = output_path = None
     try:
         video_record = get_video_record(script_id)
@@ -1138,8 +1138,12 @@ def assemble_job(script_id):
         update_video_record(script_id, video_url)
         print(f"[assemble_job] Done: {video_url}")
 
-        publish_to_youtube_job(script_id)
-        publish_to_instagram_job(script_id)
+        if auto_publish:
+            print(f"[assemble_job] auto_publish=True — publishing to YouTube + Instagram")
+            publish_to_youtube_job(script_id)
+            publish_to_instagram_job(script_id)
+        else:
+            print(f"[assemble_job] auto_publish=False — skipping publish")
 
     except Exception as e:
         import traceback
@@ -1160,10 +1164,10 @@ def assemble():
     script_id = data.get('script_id')
     if not script_id:
         return jsonify({'error': 'script_id is required'}), 400
-    thread = threading.Thread(target=assemble_job, args=(script_id,), daemon=True)
+    thread = threading.Thread(target=assemble_job, args=(script_id, False), daemon=True)
     thread.start()
     return jsonify({'status': 'Assembly started', 'script_id': script_id,
-                    'message': 'Poll Supabase videos table for video_url'}), 202
+                    'message': 'Poll /video-status for completion. Use /publish to publish manually.'}), 202
 
 
 if __name__ == '__main__':
