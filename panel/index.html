@@ -501,6 +501,140 @@ function VideosTab({ onReassemble, pipelineAdd }) {
 }
 
 
+
+// ── Render Wake Button ────────────────────────────────────────────────────────
+function RenderWakeButton({ onWakeLog }) {
+  const SLEEP_MS   = 15 * 60 * 1000;   // 15 min until Render sleeps again
+  const COUNTDOWN_S = 2 * 60;           // 2 min countdown after wake
+
+  const [waking, setWaking]         = useState(false);
+  const [countdown, setCountdown]   = useState(null);   // seconds remaining in countdown
+  const [sleepsIn, setSleepsIn]     = useState(null);   // ms until button re-activates
+  const timerRef                    = useRef(null);
+  const sleepRef                    = useRef(null);
+
+  function clearTimers() {
+    if (timerRef.current)  clearInterval(timerRef.current);
+    if (sleepRef.current)  clearTimeout(sleepRef.current);
+  }
+
+  function startSleepCountdown() {
+    const wakeTime = Date.now();
+    // Re-enable button after 15 min
+    sleepRef.current = setTimeout(() => setSleepsIn(null), SLEEP_MS);
+    // Update sleepsIn every second so we can show "active for Xm Xs"
+    timerRef.current = setInterval(() => {
+      const remaining = SLEEP_MS - (Date.now() - wakeTime);
+      if (remaining <= 0) { clearInterval(timerRef.current); setSleepsIn(null); }
+      else setSleepsIn(remaining);
+    }, 1000);
+  }
+
+  function startCountdown() {
+    setCountdown(COUNTDOWN_S);
+    const start = Date.now();
+    const tick = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - start) / 1000);
+      const left = COUNTDOWN_S - elapsed;
+      if (left <= 0) { clearInterval(tick); setCountdown(null); }
+      else setCountdown(left);
+    }, 500);
+  }
+
+  async function handleWake() {
+    setWaking(true);
+    clearTimers();
+    setSleepsIn(SLEEP_MS);   // immediately mark as just-woken
+    try {
+      onWakeLog("Waking Render…", "step");
+      for (let i = 0; i < 10; i++) {
+        try {
+          const r = await fetch(`${RENDER}/`, { signal: AbortSignal.timeout(9000) });
+          if (r.ok) { onWakeLog("Render is awake ✓", "success"); break; }
+        } catch(e) {}
+        if (i < 9) { onWakeLog(`Not ready yet… attempt ${i+2}`, "info"); await new Promise(r => setTimeout(r, 8000)); }
+      }
+      startCountdown();
+      startSleepCountdown();
+    } catch(e) {
+      onWakeLog("Wake failed: " + e.message, "error");
+      setSleepsIn(null);
+    } finally { setWaking(false); }
+  }
+
+  useEffect(() => () => clearTimers(), []);
+
+  const isDisabled = waking || sleepsIn !== null;
+
+  // Format sleepsIn as "14m 32s"
+  function fmtMs(ms) {
+    const s = Math.ceil(ms / 1000);
+    const m = Math.floor(s / 60);
+    return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
+  }
+
+  return (
+    <div style={{ maxWidth:680, margin:"0 auto 16px",
+      background:"#0a0703", border:"1px solid #1a1208",
+      borderRadius:10, padding:"12px 16px",
+      display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
+
+      <button
+        disabled={isDisabled}
+        onClick={handleWake}
+        style={{ padding:"8px 20px", borderRadius:8, border:"none",
+          fontFamily:"Georgia,serif", fontSize:13, fontWeight:700,
+          background: isDisabled
+            ? "#1a1208"
+            : "linear-gradient(135deg,#1a3a5a,#1a5a8a)",
+          color: isDisabled ? "#3a3020" : "#c8e8ff",
+          cursor: isDisabled ? "not-allowed" : "pointer",
+          whiteSpace:"nowrap",
+          boxShadow: isDisabled ? "none" : "0 2px 12px rgba(26,90,138,0.3)" }}>
+        {waking ? "Waking…" : "⚡ Wake Render"}
+      </button>
+
+      <div style={{ flex:1, minWidth:120 }}>
+        {/* Countdown — 2 min after wake */}
+        {countdown !== null && (
+          <div style={{ fontSize:12, color:"#5cb85c" }}>
+            <span style={{ fontWeight:700 }}>Render warming up — {countdown}s</span>
+            {" "}
+            <span style={{ color:"#3a6a3a", fontSize:11 }}>/ 2:00</span>
+          </div>
+        )}
+
+        {/* Sleep timer — shows how long until Render sleeps again */}
+        {countdown === null && sleepsIn !== null && (
+          <div style={{ fontSize:11, color:"#6a8a6a" }}>
+            Render active — sleeps in {fmtMs(sleepsIn)}
+          </div>
+        )}
+
+        {/* Idle state */}
+        {countdown === null && sleepsIn === null && (
+          <div style={{ fontSize:11, color:"#3a3020" }}>
+            Render may be asleep. Wake before assembling.
+          </div>
+        )}
+      </div>
+
+      {/* Active indicator dot */}
+      {sleepsIn !== null && countdown === null && (
+        <div style={{ width:8, height:8, borderRadius:"50%",
+          background:"#5cb85c", flexShrink:0,
+          boxShadow:"0 0 6px #5cb85c" }} />
+      )}
+      {countdown !== null && (
+        <div style={{ width:8, height:8, borderRadius:"50%",
+          background:"#d4a017", flexShrink:0,
+          animation:"pulse 1s infinite",
+          boxShadow:"0 0 6px #d4a017" }} />
+      )}
+    </div>
+  );
+}
+
 // ── Incomplete Jobs ───────────────────────────────────────────────────────────
 function IncompleteJobs({ onAssemble }) {
   const [jobs, setJobs]       = useState([]);
@@ -748,6 +882,9 @@ function App() {
         <div style={{ fontSize:13, color:"#a07840", marginTop:5, letterSpacing:"0.08em" }}>Been watching since before.</div>
         <div style={{ marginTop:16 }}><StatusPill status={status} /></div>
       </div>
+
+      {/* Render wake button */}
+      <RenderWakeButton onWakeLog={add} />
 
       {/* Tabs */}
       <div style={{ maxWidth:680, margin:"0 auto 0", display:"flex", gap:4, borderBottom:"2px solid #1a1208", marginBottom:0 }}>
