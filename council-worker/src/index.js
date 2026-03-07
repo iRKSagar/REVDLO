@@ -198,6 +198,10 @@ async function generateScript(openaiKey, topic, category, relatedScripts) {
   const data = await response.json();
   const raw = data.choices[0].message.content.trim();
   const cleaned = raw.replace(/```json|```/g, '').trim();
+  // Detect refusal before trying to parse
+  if (!cleaned.startsWith('{')) {
+    throw new Error('REFUSAL: ' + cleaned.slice(0, 80));
+  }
   return JSON.parse(cleaned);
 }
 
@@ -393,7 +397,29 @@ export default {
 
       const preliminaryTags = rawTopic.toLowerCase().split(' ').filter(w => w.length > 4).slice(0, 3);
       const relatedScripts = await fetchRecentScripts(env.SUPABASE_URL, env.SUPABASE_KEY, preliminaryTags);
-      const script = await generateScript(env.OPENAI_API_KEY, rawTopic, category, relatedScripts);
+
+      let script;
+      try {
+        script = await generateScript(env.OPENAI_API_KEY, rawTopic, category, relatedScripts);
+      } catch (genError) {
+        if (genError.message.startsWith('REFUSAL')) {
+          // OpenAI refused the topic — mark it used and retry with Category E fallback
+          console.log('Topic refused by OpenAI, falling back to Category E:', rawTopic);
+          if (topicId) {
+            await fetch(`${env.SUPABASE_URL}/rest/v1/topics?id=eq.${topicId}`, {
+              method: 'PATCH',
+              headers: { 'apikey': env.SUPABASE_KEY, 'Authorization': `Bearer ${env.SUPABASE_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ used: true })
+            });
+          }
+          rawTopic = 'What mattered then has no value now. What had no value then matters now.';
+          category = 'E';
+          topicId = null;
+          script = await generateScript(env.OPENAI_API_KEY, rawTopic, 'E', []);
+        } else {
+          throw genError;
+        }
+      }
 
       if (!script.setup) {
         script.setup = `In 2025, ${rawTopic.toLowerCase()}.`;
