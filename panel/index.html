@@ -229,12 +229,15 @@ async function wakeAndPublishBoth(sid, add) {
 
 // ── Videos Tab ────────────────────────────────────────────────────────────────
 function VideosTab({ onReassemble, pipelineAdd }) {
-  const [videos, setVideos] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [actionId, setActionId] = useState(null); // which row is being acted on
+  const [videos, setVideos]       = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [actionId, setActionId]   = useState(null);
+  const [selected, setSelected]   = useState(new Set());   // script_ids checked
+  const [massDeleting, setMassDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setSelected(new Set());
     try {
       const r = await fetch(`${RENDER}/videos/list`, { headers: H });
       const d = await r.json();
@@ -246,25 +249,64 @@ function VideosTab({ onReassemble, pipelineAdd }) {
 
   useEffect(() => { load(); }, []);
 
+  function toggleSelect(sid) {
+    setSelected(s => {
+      const n = new Set(s);
+      n.has(sid) ? n.delete(sid) : n.add(sid);
+      return n;
+    });
+  }
+
+  function toggleAll() {
+    if (selected.size === videos.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(videos.map(v => v.script_id)));
+    }
+  }
+
+  async function deleteSingle(scriptId) {
+    const r = await fetch(`${RENDER}/videos/delete`, { method:"POST", headers:H, body: JSON.stringify({ script_id: scriptId }) });
+    const d = await r.json();
+    if (!d.deleted) throw new Error(`Delete failed for ${scriptId.slice(0,8)}`);
+    return scriptId;
+  }
+
   async function handleDelete(scriptId) {
-    if (!confirm("Delete this video? The file will be permanently removed from storage.")) return;
+    if (!confirm("Delete this video? Permanently removed from storage.")) return;
     setActionId(scriptId + "_del");
     try {
-      const r = await fetch(`${RENDER}/videos/delete`, { method:"POST", headers:H, body: JSON.stringify({ script_id: scriptId }) });
-      const d = await r.json();
-      if (d.deleted) {
-        setVideos(v => v.filter(x => x.script_id !== scriptId));
-        pipelineAdd(`Deleted video ${scriptId.slice(0,8)}… ✓`, "success");
-      }
+      await deleteSingle(scriptId);
+      setVideos(v => v.filter(x => x.script_id !== scriptId));
+      setSelected(s => { const n = new Set(s); n.delete(scriptId); return n; });
+      pipelineAdd(`Deleted ${scriptId.slice(0,8)}… ✓`, "success");
     } catch(e) { pipelineAdd("Delete failed: " + e.message, "error"); }
     finally { setActionId(null); }
+  }
+
+  async function handleMassDelete() {
+    const ids = [...selected];
+    if (!ids.length) return;
+    if (!confirm(`Delete ${ids.length} video${ids.length>1?"s":""}? This cannot be undone.`)) return;
+    setMassDeleting(true);
+    let deleted = 0;
+    for (const sid of ids) {
+      try {
+        await deleteSingle(sid);
+        setVideos(v => v.filter(x => x.script_id !== sid));
+        setSelected(s => { const n = new Set(s); n.delete(sid); return n; });
+        deleted++;
+        pipelineAdd(`Deleted ${sid.slice(0,8)}… (${deleted}/${ids.length})`, "info");
+      } catch(e) { pipelineAdd(`Failed ${sid.slice(0,8)}: ${e.message}`, "error"); }
+    }
+    pipelineAdd(`Mass delete complete — ${deleted} of ${ids.length} removed ✓`, "success");
+    setMassDeleting(false);
   }
 
   async function handlePublishBoth(scriptId) {
     setActionId(scriptId + "_pub");
     try {
       await wakeAndPublishBoth(scriptId, pipelineAdd);
-      // Mark published in local state
       setVideos(v => v.map(x => x.script_id === scriptId
         ? { ...x, scripts: { ...x.scripts, published: true } }
         : x
@@ -274,11 +316,9 @@ function VideosTab({ onReassemble, pipelineAdd }) {
     finally { setActionId(null); }
   }
 
-  function handleReassemble(scriptId) {
-    onReassemble(scriptId);
-  }
+  const allSelected = videos.length > 0 && selected.size === videos.length;
+  const someSelected = selected.size > 0;
 
-  const rowStyle = { borderBottom:"1px solid #1a1208", paddingBottom:18, marginBottom:18 };
   const smallBtn = (color, bg, disabled) => ({
     padding:"6px 12px", borderRadius:7, border:"none",
     fontFamily:"Georgia,serif", fontSize:11, fontWeight:700,
@@ -289,12 +329,18 @@ function VideosTab({ onReassemble, pipelineAdd }) {
     whiteSpace:"nowrap"
   });
 
+  const checkStyle = {
+    width:16, height:16, accentColor:"#c4861e", cursor:"pointer", flexShrink:0
+  };
+
   return (
     <div style={{ maxWidth:680, margin:"0 auto" }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+
+      {/* Header row */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
         <div>
           <div style={{ fontSize:11, letterSpacing:"0.25em", color:"#9a6828", textTransform:"uppercase" }}>Assembled Videos</div>
-          <div style={{ fontSize:12, color:"#6a4820", marginTop:3 }}>Built via Assemble mode. Not yet published.</div>
+          <div style={{ fontSize:12, color:"#6a4820", marginTop:3 }}>Review, publish, or delete.</div>
         </div>
         <button onClick={load} disabled={loading}
           style={{ padding:"7px 16px", borderRadius:8, border:"1px solid #4a3418",
@@ -303,6 +349,45 @@ function VideosTab({ onReassemble, pipelineAdd }) {
           {loading ? "Loading…" : "↻ Refresh"}
         </button>
       </div>
+
+      {/* Selection toolbar — only shows when something is selected */}
+      {someSelected && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14,
+          padding:"10px 14px", borderRadius:9, background:"#1a1208",
+          border:"1px solid #4a3010", animation:"fadein 0.2s ease" }}>
+          <span style={{ fontSize:12, color:"#c8a870", flex:1 }}>
+            {selected.size} selected
+          </span>
+          <button
+            disabled={massDeleting}
+            onClick={handleMassDelete}
+            style={{ padding:"6px 16px", borderRadius:7, border:"none",
+              fontFamily:"Georgia,serif", fontSize:12, fontWeight:700,
+              background: massDeleting ? "#2a1010" : "linear-gradient(135deg,#5a1010,#8a1818)",
+              color: massDeleting ? "#4a2020" : "#ffd8d8",
+              cursor: massDeleting ? "not-allowed" : "pointer" }}>
+            {massDeleting ? "Deleting…" : `🗑 Delete ${selected.size}`}
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            style={{ padding:"6px 12px", borderRadius:7, border:"1px solid #3a2010",
+              background:"none", color:"#6a4020", fontFamily:"Georgia,serif",
+              fontSize:11, cursor:"pointer" }}>
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Select all row */}
+      {videos.length > 0 && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12,
+          padding:"6px 4px", borderBottom:"1px solid #1a1208" }}>
+          <input type="checkbox" checked={allSelected} onChange={toggleAll} style={checkStyle} />
+          <span style={{ fontSize:11, color:"#6a4820", cursor:"pointer" }} onClick={toggleAll}>
+            {allSelected ? "Deselect all" : `Select all (${videos.length})`}
+          </span>
+        </div>
+      )}
 
       {loading && videos.length === 0 && (
         <div style={{ color:"#4a3010", fontSize:13, textAlign:"center", padding:"40px 0" }}>Loading…</div>
@@ -323,16 +408,21 @@ function VideosTab({ onReassemble, pipelineAdd }) {
         const category = v.scripts?.category || "—";
         const date = v.created_at ? new Date(v.created_at).toLocaleString() : "—";
         const isActing = actionId && actionId.startsWith(sid);
+        const isSelected = selected.has(sid);
 
         return (
-          <div key={sid} style={{ ...rowStyle, background:"#0e0b06",
-            border:"1px solid " + (published ? "#1a3a1a" : "#2a1c08"),
-            borderRadius:12, padding:18, marginBottom:12,
-            animation:"fadein 0.25s ease" }}>
+          <div key={sid} onClick={() => toggleSelect(sid)}
+            style={{ background: isSelected ? "#1a1408" : "#0e0b06",
+              border:"1px solid " + (isSelected ? "#6a4010" : published ? "#1a3a1a" : "#2a1c08"),
+              borderRadius:12, padding:18, marginBottom:12,
+              animation:"fadein 0.25s ease", cursor:"pointer",
+              transition:"background 0.15s, border 0.15s" }}>
 
-            {/* Top row — status + date */}
+            {/* Top row — checkbox + status + date */}
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+              <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(sid)}
+                  onClick={e => e.stopPropagation()} style={checkStyle} />
                 <span style={{ padding:"2px 10px", borderRadius:10, fontSize:10, fontWeight:700,
                   letterSpacing:"0.12em", textTransform:"uppercase",
                   background: published ? "#0a1a0a" : "#1a1400",
