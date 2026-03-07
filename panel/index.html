@@ -33,13 +33,14 @@
 <script type="text/babel">
 const { useState, useRef, useEffect } = React;
 
-const BEARER = "mroldverdict_xK9mP1978";
-const COUNCIL = "https://revdlo1.rkinfoarch.workers.dev/";
-const VOICE   = "https://voice.rkinfoarch.workers.dev/";
-const IMAGE   = "https://image.rkinfoarch.workers.dev/";
-const RENDER  = "https://revdlo.onrender.com";
+// All calls go through Pages Functions — no CORS issues
+const COUNCIL = "/api/council";
+const VOICE   = "/api/voice";
+const IMAGE   = "/api/image";
+const ASSEMBLE = "/api/assemble";
+const PUBLISH  = "/api/publish";
 
-const H = { "Authorization": `Bearer ${BEARER}`, "Content-Type": "application/json" };
+const H = { "Content-Type": "application/json" };
 const CATS = ["A","B","C","D","E","F"];
 const CAT_LABELS = { A:"Modern Life", B:"Work & Hustle", C:"Relationships", D:"Time & Meaning", E:"Value Reversal", F:"Current Affairs" };
 
@@ -55,7 +56,7 @@ function useLog() {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 async function wakeRender(add) {
   add("Waking Render (free tier sleeps)…", "step");
-  try { await fetch(`${RENDER}/`, { headers: H }); add("Render is awake", "success"); }
+  try { await fetch(ASSEMBLE, { method:"GET", headers: H }); add("Render is awake", "success"); }
   catch(e) { add(`Render wake warning: ${e.message}`, "warn"); }
 }
 
@@ -83,7 +84,7 @@ async function callVoiceAndImage(sid, add) {
 
 async function callAssemble(sid, add) {
   add("Assembling video (this takes ~2 min)…", "step");
-  const r = await fetch(`${RENDER}/assemble`, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) });
+  const r = await fetch(ASSEMBLE, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) });
   const d = await r.json();
   if (d.error) throw new Error(d.error);
   add(`Video ready: ${d.video_url}`, "success");
@@ -92,7 +93,7 @@ async function callAssemble(sid, add) {
 
 async function callPublish(sid, add) {
   add("Publishing to YouTube…", "step");
-  const r = await fetch(`${RENDER}/publish`, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) });
+  const r = await fetch(PUBLISH, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) });
   const d = await r.json();
   if (d.error) throw new Error(d.error);
   add("Published to YouTube ✓", "success");
