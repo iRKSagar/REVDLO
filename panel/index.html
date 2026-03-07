@@ -263,9 +263,9 @@ function App() {
         add(`Using existing script: ${sid}`, "id");
       }
       await wakeRender(add);
-      await callAssemble(sid, add, (sid, url) => setAssembled({sid, url}));
-      setStatus("success");
-      add("Done ✓", "success");
+      const videoUrl = await callAssemble(sid, add, (s, u) => setAssembled({sid: s, url: u}));
+      setStatus(videoUrl ? "success" : "error");
+      if (videoUrl) add("Video ready — use the publish buttons above to post.", "success");
     } catch(e) {
       add(`Error: ${e.message}`, "error");
       setStatus("error");
@@ -280,9 +280,24 @@ function App() {
       const sid = await callCouncil(fCategory, add);
       await callVoiceAndImage(sid, add);
       await wakeRender(add);
-      await callAssemble(sid, add, (sid, url) => setAssembled({sid, url}));
-      setStatus("success");
-      add("Pipeline complete ✓ — YouTube + Instagram publishing in background.", "success");
+      // Wait for video to be ready, show card
+      const videoUrl = await callAssemble(sid, add, (s, u) => setAssembled({sid: s, url: u}));
+      if (videoUrl) {
+        // Auto-publish both after video confirmed ready
+        add("Auto-publishing to YouTube…", "step");
+        try {
+          await callPublish(sid, add);
+        } catch(e) { add("YouTube publish failed: " + e.message, "error"); }
+        add("Auto-publishing to Instagram…", "step");
+        try {
+          await callPublishInstagram(sid, add);
+        } catch(e) { add("Instagram publish failed: " + e.message, "error"); }
+        setStatus("success");
+        add("Pipeline complete ✓", "success");
+      } else {
+        // Polling timed out — video card not shown, leave for manual
+        setStatus("error");
+      }
     } catch(e) {
       add(`Error: ${e.message}`, "error");
       setStatus("error");
