@@ -1,6 +1,5 @@
 // Mr. Oldverdict Council Engine
 // Cloudflare Worker
-// Five functions: Receive > Memory Check > Generate > Structure > Store
 
 const COUNCIL_SYSTEM_PROMPT = `
 You are the Council, a comedy script engine for Mr. Oldverdict. Your only job is to write in his voice. Nothing else.
@@ -51,18 +50,6 @@ A third line is a quiet observation that makes the audience sit with something a
 
 If the third line does anything other than that — if it wraps up, if it explains, if it preaches, if it softens the blow — cut it entirely. Silence after the second line is better than a third line that closes what should stay open.
 
-Example of a wrong third line:
-Setup: Managers sending motivational messages at midnight.
-First: "[clears throat] In my time, the foreman knocked on your door at six."
-Second: "The messages go out at midnight. The bonus does not."
-Wrong third: "Some things never change." — wraps it up, kills the air.
-
-Example of a right third line:
-Setup: Companies offering employees free therapy after layoffs.
-First: "[exhales] We used to call it Tuesday."
-Second: "The sessions are free. The job is not."
-Right third: "I wonder what they talk about in there." — places a question, does not answer it, leaves the audience with the image. That is all.
-
 Use the third line rarely. When in doubt, leave it out.
 
 THE TWIST LAYERS
@@ -84,93 +71,44 @@ Implicit question: a plain statement that makes the audience silently ask: wait,
 
 The setup is never a summary of the topic. It is the sharpest single fact about the behavior written as if it were normal. The comedy comes from that gap — that it is stated plainly as if it is fine.
 
-Examples of weak vs strong setup lines:
-
-Weak: "People use apps to track their moods."
-Strong: "A mood tracking app now has more daily active users than most countries have voters."
-
-Weak: "Companies are cutting jobs."
-Strong: "The email announcing the layoffs was sent by an account that no longer exists."
-
-Weak: "People hire strangers to attend family events."
-Strong: "A rental family service now offers packages by the hour, plus a surcharge for funerals."
-
-Avoid starting the setup line with "People are" or "Many people" more than occasionally. Name the specific actor — professionals, couples, managers, parents, employees, companies — or state the behavior as a plain fact. Specific actors make stronger titles and stronger setup cards.
+Avoid starting the setup line with "People are" or "Many people" more than occasionally. Name the specific actor — professionals, couples, managers, parents, employees, companies — or state the behavior as a plain fact.
 
 Never use specific currency amounts or currency names — no dollars, pounds, rupees, euros, numbers with currency. If a price or cost needs to land, use vague quantities — "by the hour", "costs extra", "not cheap", "the invoice was long" — or contrast with something that was free. The audience is global. Currency is local.
 
 BENCHMARK LINES - every script must clear this bar
-Raw idea: A teenager excited about 20 likes on Instagram.
-Mr. Oldverdict: "Publish it in the newspaper."
-
-Raw idea: Someone showing him something on their phone.
-Mr. Oldverdict: "Are you ok. What did you have for lunch. Did you pluck it out of your mobile or did you cook."
-
-Raw idea: A boy mocking him for being old.
-Mr. Oldverdict: "Yes. Miss Brown. Your grandmother's mother. She never had it with those twisted hips."
-
-Raw idea: Modern obsession with calories and diet.
-Mr. Oldverdict: "We called it dinner. You call it a wellness journey. Same plate."
-
-Raw idea: Caring being seen as weakness today.
-Mr. Oldverdict: "I once saw a man carry his neighbor three miles in the rain. Nobody called it a boundary violation."
-
-Raw idea: Living without loans or EMI.
-Mr. Oldverdict: "I have never owed anyone anything. Apparently that is now a personality disorder."
-
-Raw idea: AI replacing human jobs.
-Mr. Oldverdict: "So the machine writes it. You send it. And they reply to the machine. When exactly do you show up?"
-
-Raw idea: Planning vacations instead of living now.
-Mr. Oldverdict: "The food is getting cold. But the memory is loading."
-
-Raw idea: Rich man scared of losing everything.
-Mr. Oldverdict: "He spent his whole life chasing more. Got it. Now he is scared of losing it. Congratulations. You have upgraded your problem."
+"Publish it in the newspaper." (on teenager excited about 20 likes)
+"We called it dinner. You call it a wellness journey. Same plate." (on wellness obsession)
+"I once saw a man carry his neighbor three miles in the rain. Nobody called it a boundary violation." (on caring seen as weakness)
+"I have never owed anyone anything. Apparently that is now a personality disorder." (on living without debt)
+"The food is getting cold. But the memory is loading." (on planning instead of living)
 
 BLACKLIST - never touch these by name
 Political parties. Political leaders. Specific countries. Specific ideologies. Named religions. Named religious practices. Named religious texts. Named brands. Named companies. Named platforms. Named apps. Living persons. Recently deceased persons. Celebrities. Influencers. Athletes. Business leaders.
-
-WHAT MR. OLDVERDICT CAN TOUCH
-Politics as human behavior. Power hunger. Empty promises. The theater of leadership. He speaks to the behavior not the party or the person.
-Religion as human need. The search for meaning. The fear behind ritual. He speaks to the universal impulse not the named faith.
-Current events as human pattern. When something happens in the world — a war, a crisis, a corporate collapse, a public apology — he does not name the event. He names the behavior it reveals. The behavior is always older than the event.
 
 BLACKLIST TEST - before writing anything ask this
 Does this line require a name, a party, a country, a religion, or a leader to land? If yes rewrite it without those. If it cannot land without naming something specific the topic is dropped entirely.
 
 THE OPENING HOOK RULE
-Every script must start with one emotion tag that hooks the audience in the first two seconds. These tags are performed by the voice engine as natural sounds not read as words.
+Every script must start with one emotion tag that hooks the audience in the first two seconds.
 
-Use exactly one based on content.
+[laughing] - for absurd modern behavior. Dry, barely there.
+[sighs] - for something he has seen a thousand times.
+[clears throat] - for corporate nonsense or bureaucratic theater.
+[exhales] - for universal human foolishness he expected.
+[coughs] - for something particularly stupid.
 
-[laughing] - for absurd modern behavior. Dry, barely there. One note of quiet amusement.
-[sighs] - for something he has seen a thousand times. Already past it.
-[clears throat] - for corporate nonsense or bureaucratic theater. About to correct something.
-[exhales] - for universal human foolishness he expected. Almost a laugh but not quite.
-[coughs] - for something particularly stupid. Short, sharp, involuntary.
-
-The tag goes at the very start of line one only. One tag. Then the line immediately after. Nothing else before it.
-
-Example:
-Right: "[sighs] In my day, we called it sitting down and closing our eyes."
-Right: "[laughing] We called it dinner. You call it a wellness journey. Same plate."
-Right: "[clears throat] I once left a note: Gone fishing. Nobody emailed the lake."
-
-Never use more than one tag per script. Never put a tag on the second line. Never use Ha, Heh, Hmm or ellipsis as hooks. Only the five tags above.
+The tag goes at the very start of line one only. One tag. Never more than one per script. Never on the second line.
 
 THE SETUP LINE RULE
-Every script must include a setup line. This is not Mr. Oldverdict speaking. This is a plain dry observation of what is happening in the modern world that he is about to react to. It appears on screen as a text card for five seconds before he speaks.
-
-The setup line is written in the third person. Present tense. One sentence. No humor. No judgment. Just what is happening — stated as if it is perfectly normal. The humor comes from Mr. Oldverdict's reaction to it not from the setup itself. But the setup must be interesting enough on its own to make someone stop scrolling. A contradiction, a specific absurd fact, or an implicit question. Never a neutral summary.
+Every script must include a setup line. This is not Mr. Oldverdict speaking. It appears on screen as a text card. Third person. Present tense. One sentence. No humor. No judgment. Just the behavior stated as if it is perfectly normal.
 
 OUTPUT FORMAT - return valid JSON only, no markdown, no extra text
 {
-  "setup": "One plain dry sentence describing the modern behavior. Must contain a contradiction, a specific absurd detail, or an implicit question. Never a neutral summary.",
-  "scene": "One line visual direction. Describes what Mr. Oldverdict is observing. Specific enough to generate an image from.",
+  "setup": "One plain dry sentence describing the modern behavior.",
+  "scene": "One line visual direction for image generation.",
   "lines": [
     { "text": "[emotion_tag] His first line.", "pause_after": true },
-    { "text": "His second line if earned. Otherwise omit.", "pause_after": false },
-    { "text": "His third line if it earns its place. A quiet observation that leaves a question open. Omit if in doubt.", "pause_after": false }
+    { "text": "His second line if earned.", "pause_after": false }
   ],
   "prop": "cigar | watch | both | none",
   "expression": "flat_observation | slight_raise | mid_line_delivery | quiet_concern | precise_destruction | faint_amusement",
@@ -186,6 +124,13 @@ const BLACKLIST_KEYWORDS = [
   'elon', 'musk', 'bezos', 'zuckerberg', 'epstein', 'kardashian',
   'gen z', 'genz', 'generation z', 'zoomer'
 ];
+
+// ── CORS headers added to every response ─────────────────────────────────────
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+};
 
 function passesBlacklist(text) {
   const lower = text.toLowerCase();
@@ -223,7 +168,7 @@ async function generateScript(openaiKey, topic, category, relatedScripts) {
     'C': 'Relationships and belonging. Family, parenting, friendships, loneliness packaged as independence, and the performance of connection.',
     'D': 'Time and meaning. How people plan, delay, waste, and mourn time. Vacations, routines, screen time, nostalgia, and the present moment nobody is living in.',
     'E': 'Value reversal. What mattered then has no value now. What had no value then matters now. Good or bad is left to the audience. Humor always present.',
-    'F': 'Indirect current affairs. Wars, crises, corporate collapses, public apologies, institutional failures. Never named. Never located. Mr. Oldverdict speaks only to the human behavior the event reveals — the panic, the theater, the excuse, the denial. The behavior is always older than the event. He has seen it before. He will see it again.'
+    'F': 'Indirect current affairs. Wars, crises, corporate collapses, public apologies, institutional failures. Never named. Never located. Mr. Oldverdict speaks only to the human behavior the event reveals — the panic, the theater, the excuse, the denial. The behavior is always older than the event.'
   };
 
   const userPrompt = `Category ${category}: ${categoryDescriptions[category]}\n\nRaw topic: ${topic}${memoryContext}\n\nWrite the Mr. Oldverdict script. Return valid JSON only.`;
@@ -316,14 +261,10 @@ async function storeScript(supabaseUrl, supabaseKey, topicId, category, rawTopic
 }
 
 async function getNextTopic(supabaseUrl, supabaseKey) {
-  // Step 1: Get last 8 published scripts to check streak and wildcard cycle
   const recentRes = await fetch(
     `${supabaseUrl}/rest/v1/scripts?published=eq.true&order=published_at.desc&limit=8&select=category`,
     {
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`
-      }
+      headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` }
     }
   );
 
@@ -333,7 +274,6 @@ async function getNextTopic(supabaseUrl, supabaseKey) {
     recentCategories = recent.map(s => s.category);
   }
 
-  // Step 2: Check wildcard — every 8th published video forces Category E
   const totalRes = await fetch(
     `${supabaseUrl}/rest/v1/scripts?published=eq.true&select=id`,
     {
@@ -349,81 +289,50 @@ async function getNextTopic(supabaseUrl, supabaseKey) {
   let totalPublished = 0;
   if (totalRes.ok) {
     const countHeader = totalRes.headers.get('Content-Range');
-    if (countHeader) {
-      totalPublished = parseInt(countHeader.split('/')[1]) || 0;
-    }
+    if (countHeader) totalPublished = parseInt(countHeader.split('/')[1]) || 0;
   }
 
   const isWildcard = totalPublished > 0 && (totalPublished + 1) % 8 === 0;
-
   if (isWildcard) {
     const wildcardRes = await fetch(
       `${supabaseUrl}/rest/v1/topics?used=eq.false&blacklist_cleared=eq.true&category=eq.E&order=engagement_score.desc&limit=1`,
-      {
-        headers: {
-          'apikey': supabaseKey,
-          'Authorization': `Bearer ${supabaseKey}`
-        }
-      }
+      { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` } }
     );
     if (wildcardRes.ok) {
       const wildcardTopics = await wildcardRes.json();
       if (wildcardTopics.length > 0) return wildcardTopics[0];
     }
-    // No Category E topics available — fall through to normal logic
   }
 
-  // Step 3: Check streak — if last 3 are same category, force rotation
   const last3 = recentCategories.slice(0, 3);
   const streakCategory = last3.length === 3 && last3.every(c => c === last3[0]) ? last3[0] : null;
-
   if (streakCategory) {
     const rotateRes = await fetch(
       `${supabaseUrl}/rest/v1/topics?used=eq.false&blacklist_cleared=eq.true&category=neq.${streakCategory}&order=engagement_score.desc&limit=1`,
-      {
-        headers: {
-          'apikey': supabaseKey,
-          'Authorization': `Bearer ${supabaseKey}`
-        }
-      }
+      { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` } }
     );
     if (rotateRes.ok) {
       const rotateTopics = await rotateRes.json();
       if (rotateTopics.length > 0) return rotateTopics[0];
     }
-    // No other category topics — fall through
   }
 
-  // Step 4: Streak building — if last 2 are same category, continue it
   const last2 = recentCategories.slice(0, 2);
   const streakBuilding = last2.length === 2 && last2[0] === last2[1];
-
   if (streakBuilding) {
     const continueRes = await fetch(
       `${supabaseUrl}/rest/v1/topics?used=eq.false&blacklist_cleared=eq.true&category=eq.${last2[0]}&order=engagement_score.desc&limit=1`,
-      {
-        headers: {
-          'apikey': supabaseKey,
-          'Authorization': `Bearer ${supabaseKey}`
-        }
-      }
+      { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` } }
     );
     if (continueRes.ok) {
       const continueTopics = await continueRes.json();
       if (continueTopics.length > 0) return continueTopics[0];
     }
-    // No more topics in this category — fall through
   }
 
-  // Step 5: Default — highest scoring unused topic across all categories (A-F)
   const defaultRes = await fetch(
     `${supabaseUrl}/rest/v1/topics?used=eq.false&blacklist_cleared=eq.true&order=engagement_score.desc&limit=1`,
-    {
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`
-      }
-    }
+    { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` } }
   );
   if (!defaultRes.ok) return null;
   const defaultTopics = await defaultRes.json();
@@ -432,19 +341,25 @@ async function getNextTopic(supabaseUrl, supabaseKey) {
 
 export default {
   async fetch(request, env) {
+
+    // ── CORS preflight ────────────────────────────────────────────────────
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: CORS_HEADERS });
+    }
+
     if (request.method === 'GET') {
       return new Response(JSON.stringify({ status: 'Mr. Oldverdict is watching.' }), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
       });
     }
 
     if (request.method !== 'POST') {
-      return new Response('Method not allowed', { status: 405 });
+      return new Response('Method not allowed', { status: 405, headers: CORS_HEADERS });
     }
 
     const authHeader = request.headers.get('Authorization');
     if (authHeader !== `Bearer ${env.COUNCIL_SECRET}`) {
-      return new Response('Unauthorized', { status: 401 });
+      return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS });
     }
 
     try {
@@ -453,15 +368,12 @@ export default {
       let topicId, rawTopic, category;
 
       if (body.raw_topic && body.category) {
-        // Manual injection
         rawTopic = body.raw_topic;
         category = body.category;
         topicId = body.topic_id || null;
       } else {
-        // Auto pull from ingestion queue with streak logic
         const topic = await getNextTopic(env.SUPABASE_URL, env.SUPABASE_KEY);
         if (!topic) {
-          // Fallback to Category E proverb
           rawTopic = 'What mattered then has no value now. What had no value then matters now.';
           category = 'E';
           topicId = null;
@@ -476,12 +388,11 @@ export default {
         return new Response(JSON.stringify({
           error: 'Topic did not pass blacklist filter.',
           topic: rawTopic
-        }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        }), { status: 400, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } });
       }
 
       const preliminaryTags = rawTopic.toLowerCase().split(' ').filter(w => w.length > 4).slice(0, 3);
       const relatedScripts = await fetchRecentScripts(env.SUPABASE_URL, env.SUPABASE_KEY, preliminaryTags);
-
       const script = await generateScript(env.OPENAI_API_KEY, rawTopic, category, relatedScripts);
 
       if (!script.setup) {
@@ -489,13 +400,8 @@ export default {
       }
 
       const stored = await storeScript(
-        env.SUPABASE_URL,
-        env.SUPABASE_KEY,
-        topicId,
-        category,
-        rawTopic,
-        script,
-        relatedScripts
+        env.SUPABASE_URL, env.SUPABASE_KEY,
+        topicId, category, rawTopic, script, relatedScripts
       );
 
       return new Response(JSON.stringify({
@@ -506,15 +412,13 @@ export default {
         script,
         memory_connections: relatedScripts.length
       }), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
       });
 
     } catch (error) {
-      return new Response(JSON.stringify({
-        error: error.message
-      }), {
+      return new Response(JSON.stringify({ error: error.message }), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
       });
     }
   },
