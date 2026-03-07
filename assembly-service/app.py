@@ -14,7 +14,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, request, jsonify
 from moviepy.editor import (
-    ImageClip, AudioFileClip, CompositeVideoClip, TextClip
+    ImageClip, VideoClip, AudioFileClip, CompositeVideoClip, TextClip
 )
 from moviepy.video.fx.all import crop
 from moviepy.audio.AudioClip import AudioClip, concatenate_audioclips
@@ -651,33 +651,36 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None,
     target_width = 540
     target_height = 960
 
-    # ── Load, resize and crop image entirely in PIL — no MoviePy fx chain ──────
-    # Doing all spatial transforms in PIL before handing to MoviePy avoids
-    # silent failures in resize/crop chains on Render's CPU environment.
-    pil_img = PIL.Image.open(image_path).convert('RGB')
-    img_w, img_h = pil_img.size
-    # 1.2x scale for tight face framing
-    scale = max(target_width / img_w, target_height / img_h) * 1.2
-    new_w = int(img_w * scale)
-    new_h = int(img_h * scale)
-    pil_img = pil_img.resize((new_w, new_h), PIL.Image.LANCZOS)
-    # Crop: x center, y at 38% (upper body / face)
-    x0 = (new_w - target_width) // 2
-    y0 = int(new_h * 0.38) - target_height // 2
-    y0 = max(0, min(y0, new_h - target_height))
-    x0 = max(0, min(x0, new_w - target_width))
-    pil_img = pil_img.crop((x0, y0, x0 + target_width, y0 + target_height))
-    frame_array = np.array(pil_img)
+    # ── Load original image in PIL — keep full res for zoom math ───────────────
+    pil_orig = PIL.Image.open(image_path).convert('RGB')
+    img_w, img_h = pil_orig.size
+    base_scale = max(target_width / img_w, target_height / img_h) * 1.2
 
     # ── Total main clip duration: voice + clean hold ─────────────────────────
     post_hold = 2.2
     total_duration = voice_duration + post_hold
 
-    # Single clean ImageClip from processed numpy array — no transforms applied
-    image_clip = ImageClip(frame_array).set_duration(total_duration)
+    # ── Ken Burns: slow zoom 1.0x → 1.08x over total_duration ───────────────
+    # Per-frame PIL resize+crop. BILINEAR used (faster than LANCZOS, imperceptible
+    # difference at short durations). ~480 frames at 24fps, ~2ms each on Render.
+    def make_frame(t):
+        progress = min(t / total_duration, 1.0)
+        zoom = 1.0 + 0.08 * progress          # 1.00 → 1.08
+        scale = base_scale * zoom
+        new_w = int(img_w * scale)
+        new_h = int(img_h * scale)
+        frame = pil_orig.resize((new_w, new_h), PIL.Image.BILINEAR)
+        x0 = (new_w - target_width) // 2
+        y0 = int(new_h * 0.38) - target_height // 2
+        y0 = max(0, min(y0, new_h - target_height))
+        x0 = max(0, min(x0, new_w - target_width))
+        frame = frame.crop((x0, y0, x0 + target_width, y0 + target_height))
+        return np.array(frame)
+
+    image_clip = VideoClip(make_frame, duration=total_duration)
 
     # ── Leather panel + HUD — only during voice, not during hold ────────────
-    panel_layers = build_caption_panel(target_width, target_height, voice_duration)
+    panel_layers = build_caption_panel(target_width, target_height, voice_duration, leather_path=leather_panel_path)
 
     # ── Captions: setup text → line 1 → line 2 ──────────────────────────────
     # Setup text is first caption, then line 1, then line 2
