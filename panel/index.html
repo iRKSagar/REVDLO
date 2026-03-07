@@ -184,20 +184,19 @@ async function callAssemble(sid, add, onVideoReady) {
   add("Assembly started ✓ — polling for completion…", "success");
   for (let i = 0; i < 25; i++) {
     await new Promise(res => setTimeout(res, 12000));
-    add(`Waiting for video… (${(i+1)*12}s)`, "info");
+    if (i % 3 === 0) add(`Still assembling… (${(i+1)*12}s elapsed)`, "info");
     try {
       const sr = await fetch(`${RENDER}/video-status?script_id=${sid}`, { headers: H });
-      if (sr.ok) {
-        const sd = await sr.json();
-        if (sd.ready && sd.video_url) {
-          add("Video assembled ✓", "success");
-          if (onVideoReady) onVideoReady(sid, sd.video_url);
-          return sd.video_url;
-        }
+      if (!sr.ok) { if (i % 3 === 0) add(`Poll returned ${sr.status} — retrying…`, "warn"); continue; }
+      const sd = await sr.json();
+      if (sd.ready && sd.video_url) {
+        add("Video assembled ✓", "success");
+        if (onVideoReady) onVideoReady(sid, sd.video_url);
+        return sd.video_url;
       }
-    } catch(e) { /* keep polling */ }
+    } catch(e) { if (i % 3 === 0) add(`Poll error: ${e.message}`, "warn"); }
   }
-  add("Assembly taking longer than expected — check Render logs", "warn");
+  add("Timed out after 5 min — check Render logs", "warn");
   return null;
 }
 
@@ -547,7 +546,7 @@ function App() {
         setVideosKey(k => k + 1);  // refresh videos tab
       });
       setStatus(videoUrl ? "success" : "error");
-      if (videoUrl) add("Video ready — review and publish from the Videos tab.", "success");
+      if (videoUrl) add("✓ Video ready — link and publish button below.", "success");
     } catch(e) {
       add(`Error: ${e.message}`, "error");
       setStatus("error");
@@ -670,48 +669,56 @@ function App() {
 
             {/* Last assembled video card */}
             {assembled && (
-              <div style={{ marginTop:24, background:"#0e0b06", border:"1px solid #3a2810",
-                borderRadius:12, padding:20, animation:"fadein 0.3s ease" }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-                  <div style={{ fontSize:11, letterSpacing:"0.2em", color:"#c09050", textTransform:"uppercase" }}>
-                    Last Assembled
+              <div style={{ marginTop:24, background:"#0e0b06",
+                border: assembled.published ? "1px solid #2a4a2a" : "1px solid #8b5e1a",
+                borderRadius:12, padding:24, animation:"fadein 0.3s ease",
+                boxShadow: assembled.published ? "none" : "0 0 24px rgba(180,110,20,0.15)" }}>
+
+                {/* Header */}
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:"#d4a017" }}>
+                    {assembled.published ? "✓ Published" : "🎬 Video Ready"}
                   </div>
-                  {assembled.published && (
-                    <span style={{ fontSize:10, color:"#5cb85c", background:"#0a1a0a",
-                      border:"1px solid #2a4a2a", borderRadius:10, padding:"2px 10px",
-                      letterSpacing:"0.1em", textTransform:"uppercase" }}>Published ✓</span>
-                  )}
+                  <button onClick={() => setAssembled(null)}
+                    style={{ background:"none", border:"none", color:"#4a3010",
+                      fontSize:18, cursor:"pointer", lineHeight:1, padding:"0 4px" }}>✕</button>
                 </div>
-                <div style={{ fontFamily:"monospace", fontSize:10, color:"#4a3010", marginBottom:10, wordBreak:"break-all" }}>
+
+                {/* Video link — big and obvious */}
+                <a href={assembled.url} target="_blank" rel="noopener noreferrer"
+                  style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 16px",
+                    borderRadius:9, background:"#141008", border:"1px solid #6a4010",
+                    color:"#d4a017", textDecoration:"none", marginBottom:16,
+                    fontSize:13, fontWeight:700, letterSpacing:"0.03em" }}>
+                  <span style={{ fontSize:18 }}>▶</span>
+                  <span>Watch video ↗</span>
+                </a>
+
+                {/* Script ID — small, secondary */}
+                <div style={{ fontFamily:"monospace", fontSize:10, color:"#3a2810",
+                  marginBottom:16, wordBreak:"break-all" }}>
                   {assembled.sid}
                 </div>
-                <a href={assembled.url} target="_blank" rel="noopener noreferrer"
-                  style={{ display:"block", padding:"8px 12px", borderRadius:7,
-                    background:"#0a0703", border:"1px solid #3a2810", color:"#9a6828",
-                    textDecoration:"none", fontFamily:"monospace", fontSize:10,
-                    wordBreak:"break-all", marginBottom:14, lineHeight:1.5 }}>
-                  ▶ View video ↗
-                </a>
+
+                {/* Publish button — only if not yet published */}
                 {!assembled.published && (
-                  <div style={{ display:"flex", gap:8 }}>
-                    <button disabled={publishing} onClick={async () => {
-                        setPublishing(true);
-                        try { await wakeAndPublishBoth(assembled.sid, add);
-                          setAssembled(a => ({...a, published:true})); setVideosKey(k=>k+1);
-                        } catch(e) { add("Publish failed: "+e.message,"error"); }
-                        finally { setPublishing(false); }
-                      }}
-                      style={{ flex:1, padding:"9px 0", borderRadius:8, border:"none",
-                        fontFamily:"Georgia,serif", fontSize:12, fontWeight:700,
-                        cursor: publishing ? "not-allowed" : "pointer",
-                        background: publishing ? "#2a1c08" : "linear-gradient(135deg,#8b5e1a,#c4861e)",
-                        color: publishing ? "#3a2810" : "#fff2d8" }}>
-                      {publishing ? "Publishing…" : "▶ Publish Both"}
-                    </button>
-                    <button onClick={() => setAssembled(null)}
-                      style={{ padding:"9px 16px", borderRadius:8, border:"1px solid #2a1c08",
-                        background:"none", color:"#4a3010", fontFamily:"Georgia,serif", fontSize:12, cursor:"pointer" }}>✕</button>
-                  </div>
+                  <button disabled={publishing} onClick={async () => {
+                      setPublishing(true);
+                      try {
+                        await wakeAndPublishBoth(assembled.sid, add);
+                        setAssembled(a => ({...a, published:true}));
+                        setVideosKey(k => k+1);
+                      } catch(e) { add("Publish failed: "+e.message, "error"); }
+                      finally { setPublishing(false); }
+                    }}
+                    style={{ width:"100%", padding:"12px 0", borderRadius:9, border:"none",
+                      fontFamily:"Georgia,serif", fontSize:14, fontWeight:700,
+                      cursor: publishing ? "not-allowed" : "pointer",
+                      background: publishing ? "#2a1c08" : "linear-gradient(135deg,#8b5e1a,#c4861e)",
+                      color: publishing ? "#3a2810" : "#fff2d8",
+                      boxShadow: publishing ? "none" : "0 2px 16px rgba(180,110,20,0.3)" }}>
+                    {publishing ? "Publishing to YouTube then Instagram…" : "▶ Publish to YouTube + Instagram"}
+                  </button>
                 )}
               </div>
             )}
