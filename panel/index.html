@@ -63,8 +63,12 @@ async function wakeRender(add) {
 async function callCouncil(category, add) {
   add(`Calling council (Category ${category}: ${CAT_LABELS[category]})…`, "step");
   const r = await fetch(COUNCIL, { method:"POST", headers:H, body: JSON.stringify({ category }) });
-  const d = await r.json();
-  if (!d.script_id) throw new Error("Council failed: " + JSON.stringify(d));
+  const text = await r.text();
+  add(`Council raw response: ${text.slice(0, 200)}`, "info");
+  let d;
+  try { d = JSON.parse(text); } catch(e) { throw new Error("Council returned non-JSON: " + text.slice(0,200)); }
+  if (d.error) throw new Error("Council error: " + d.error);
+  if (!d.script_id) throw new Error("No script_id in response: " + JSON.stringify(d));
   add(`Script ID: ${d.script_id}`, "id");
   add(`Topic: ${d.raw_topic || d.script?.raw_topic || "—"}`, "info");
   return d.script_id;
