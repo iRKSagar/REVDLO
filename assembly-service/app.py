@@ -34,6 +34,7 @@ def add_cors(response):
 @app.route('/publish-instagram', methods=['OPTIONS'])
 @app.route('/run-pipeline', methods=['OPTIONS'])
 @app.route('/video-status', methods=['OPTIONS'])
+@app.route('/videos/incomplete', methods=['OPTIONS'])
 def options_handler():
     return '', 204
 
@@ -1290,6 +1291,30 @@ def videos_delete():
         return jsonify({'deleted': True, 'script_id': script_id})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/videos/incomplete', methods=['GET'])
+def videos_incomplete():
+    """Return scripts that have voice + image but no video yet.
+    These are stalled assembly jobs that can be re-triggered."""
+    if not check_auth(request):
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        # Videos rows where voice_file_url and image_url exist but video_url is null
+        res = requests.get(
+            f"{SUPABASE_URL}/rest/v1/videos"
+            f"?select=id,script_id,voice_file_url,image_url,video_url,created_at,scripts(setup,category,raw_topic)"
+            f"&voice_file_url=not.is.null"
+            f"&image_url=not.is.null"
+            f"&video_url=is.null"
+            f"&order=created_at.desc",
+            headers={'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
+        )
+        rows = res.json()
+        return jsonify({'incomplete': rows})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
