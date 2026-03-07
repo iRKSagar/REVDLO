@@ -66,24 +66,70 @@ function buildImagePrompt(script) {
   return `${CHARACTER_BASE_PROMPT}${propAddition}${expressionAddition}, ${sceneDirection}`;
 }
 
-async function initiateImageGeneration(leonardoKey, prompt) {
-  const response = await fetch(`${LEONARDO_API_URL}/generations`, {
+async function uploadReferenceImage(leonardoKey, imageUrl) {
+  // Step 1: Download reference image from Supabase
+  const imgRes = await fetch(imageUrl);
+  if (!imgRes.ok) throw new Error('Failed to fetch reference image');
+  const imgBuffer = await imgRes.arrayBuffer();
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(imgBuffer)));
+
+  // Step 2: Upload to Leonardo to get internal init_image_id
+  const uploadRes = await fetch(`${LEONARDO_API_URL}/init-image`, {
     method: 'POST',
     headers: {
       'authorization': `Bearer ${leonardoKey}`,
       'content-type': 'application/json'
     },
     body: JSON.stringify({
-      modelId: LEONARDO_MODEL_ID,
-      prompt: prompt,
-      negative_prompt: "cartoon, anime, childish, ugly, deformed, blurry, low quality, modern clothing, logos, branded, smiling broadly, angry, surprised, young, female, different person, different face",
-      num_images: 1,
-      width: 576,
-      height: 1024,
-      guidance_scale: 7,
-      num_inference_steps: 30,
-      public: false
+      extension: 'jpg'
     })
+  });
+
+  if (!uploadRes.ok) {
+    const err = await uploadRes.text();
+    throw new Error(`Leonardo init-image upload failed: ${err}`);
+  }
+
+  const uploadData = await uploadRes.json();
+  const { url: s3Url, fields, id: initImageId } = uploadData.uploadInitImage;
+
+  // Step 3: PUT the image to the S3 presigned URL
+  const formData = new FormData();
+  Object.entries(fields).forEach(([k, v]) => formData.append(k, v));
+  formData.append('file', new Blob([imgBuffer], { type: 'image/jpeg' }));
+
+  const s3Res = await fetch(s3Url, { method: 'POST', body: formData });
+  if (!s3Res.ok) throw new Error('S3 upload failed for reference image');
+
+  return initImageId;
+}
+
+async function initiateImageGeneration(leonardoKey, prompt, initImageId) {
+  const body = {
+    modelId: LEONARDO_MODEL_ID,
+    prompt: prompt,
+    negative_prompt: "cartoon, anime, childish, ugly, deformed, blurry, low quality, modern clothing, logos, branded, smiling broadly, angry, surprised, young, female, different person, different face",
+    num_images: 1,
+    width: 576,
+    height: 1024,
+    guidance_scale: 7,
+    num_inference_steps: 30,
+    public: false
+  };
+
+  // Use reference image for character consistency if available
+  if (initImageId) {
+    body.init_image_id = initImageId;
+    body.init_strength = 0.25;  // 0.25 = strong character match, still allows scene variation
+  }
+
+  const response = await fetch(`${LEONARDO_API_URL}/generations`, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${leonardoKey}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify(body)
   });
 
   if (!response.ok) {
@@ -217,7 +263,20 @@ export default {
 
       const script = await getScriptForImage(env.SUPABASE_URL, env.SUPABASE_KEY, scriptId);
       const imagePrompt = buildImagePrompt(script);
-      const generationId = await initiateImageGeneration(env.LEONARDO_API_KEY, imagePrompt);
+
+      // Upload reference image to Leonardo for character consistency
+      // REFERENCE_IMAGE_URL set in Cloudflare worker env vars
+      let initImageId = null;
+      if (env.REFERENCE_IMAGE_URL) {
+        try {
+          initImageId = await uploadReferenceImage(env.LEONARDO_API_KEY, env.REFERENCE_IMAGE_URL);
+          console.log('Reference image uploaded, initImageId:', initImageId);
+        } catch (refErr) {
+          console.log('Reference image upload failed (continuing without):', refErr.message);
+        }
+      }
+
+      const generationId = await initiateImageGeneration(env.LEONARDO_API_KEY, imagePrompt, initImageId);
       const leonardoImageUrl = await pollForImage(env.LEONARDO_API_KEY, generationId);
       const supabaseImageUrl = await downloadAndUploadImage(
         env.SUPABASE_URL, env.SUPABASE_KEY, script.id, leonardoImageUrl
