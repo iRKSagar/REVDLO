@@ -491,9 +491,71 @@ def build_caption_panel(video_width, video_height, duration, leather_path=None):
     return [base]
 
 
+def render_caption_image(text, video_width, panel_h):
+    """Render caption text to a PIL RGBA image using PIL — no ImageMagick, no clipping.
+    Returns numpy RGBA array sized (panel_h, video_width, 4)."""
+    from PIL import ImageFont, ImageDraw
+    import textwrap
+
+    font_size = 32
+    padding_x = 48   # horizontal margin inside panel
+    max_w = video_width - padding_x * 2
+
+    # Try to load a clean system font, fall back to default
+    font = None
+    for font_path in [
+        '/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf',
+        '/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf',
+        '/usr/share/fonts/truetype/freefont/FreeSerifBold.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+    ]:
+        if os.path.exists(font_path):
+            try:
+                font = ImageFont.truetype(font_path, font_size)
+                break
+            except Exception:
+                continue
+    if font is None:
+        font = ImageFont.load_default()
+
+    # Wrap text to fit panel width
+    avg_char_w = font_size * 0.55
+    wrap_width = max(1, int(max_w / avg_char_w))
+    wrapped_lines = textwrap.wrap(text, width=wrap_width)
+    if not wrapped_lines:
+        wrapped_lines = [text]
+
+    # Measure total text height
+    line_h = font_size + 8
+    total_text_h = len(wrapped_lines) * line_h
+
+    # Create RGBA canvas — fully transparent
+    img = PIL.Image.new('RGBA', (video_width, panel_h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # Draw each line centered, with black stroke then white fill
+    y_start = (panel_h - total_text_h) // 2
+    for j, line in enumerate(wrapped_lines):
+        bbox = draw.textbbox((0, 0), line, font=font)
+        line_w = bbox[2] - bbox[0]
+        x = (video_width - line_w) // 2
+        y = y_start + j * line_h
+
+        # Stroke (draw at offsets)
+        stroke = 2
+        for dx in range(-stroke, stroke + 1):
+            for dy in range(-stroke, stroke + 1):
+                if dx != 0 or dy != 0:
+                    draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0, 255))
+        # Fill
+        draw.text((x, y), line, font=font, fill=(255, 255, 255, 255))
+
+    return np.array(img)
+
+
 def build_caption_clips(setup_text, lines, voice_duration, video_width, video_height):
     """Captions for setup text + line 1 + line 2, synced to voice duration.
-    Setup text gets 1.65x weight (pause_after). All captions sit inside leather panel."""
+    PIL-rendered — no ImageMagick, no clipping, no font surprises."""
     caption_clips = []
 
     all_items = []
@@ -518,7 +580,6 @@ def build_caption_clips(setup_text, lines, voice_duration, video_width, video_he
 
     panel_h = 310
     panel_y = video_height - panel_h
-    text_y = panel_y + 43  # 20% walked back down
 
     current_time = 0
     for i, item in enumerate(all_items):
@@ -533,23 +594,15 @@ def build_caption_clips(setup_text, lines, voice_duration, video_width, video_he
             break
 
         try:
-            txt_clip = (TextClip(
-                text,
-                fontsize=34,
-                color='white',
-                font='DejaVu-Serif-Bold',
-                method='caption',
-                size=(video_width - 80, None),
-                stroke_color='black',
-                stroke_width=3,
-                align='center'
-            )
-            .set_position(('center', text_y))
-            .set_start(current_time)
-            .set_duration(duration))
-            caption_clips.append(txt_clip)
+            arr = render_caption_image(text, video_width, panel_h)
+            clip = (ImageClip(arr, ismask=False)
+                    .set_position((0, panel_y))
+                    .set_start(current_time)
+                    .set_duration(duration))
+            caption_clips.append(clip)
+            print(f'[caption {i}] "{text[:40]}…" dur={duration:.2f}s')
         except Exception as e:
-            print(f'Caption generation failed for item {i}: {e}')
+            print(f'[caption {i}] PIL render failed: {e}')
 
         current_time += duration
 
