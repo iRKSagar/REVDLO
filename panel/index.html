@@ -55,20 +55,20 @@ function useLog() {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 async function wakeRender(add) {
-  add("Waking Render — may take up to 60s on cold start…", "step");
-  const maxAttempts = 12; // 12 x 5s = 60 seconds
+  add("Waking Render — cold start can take 30–60s…", "step");
+  const maxAttempts = 10;
+  const intervalMs = 8000; // 8 seconds between each try
   for (let i = 0; i < maxAttempts; i++) {
+    if (i > 0) {
+      add(`Waiting for Render… (${i}/${maxAttempts})`, "info");
+      await new Promise(res => setTimeout(res, intervalMs));
+    }
     try {
       const r = await fetch(`${RENDER}/`, { headers: H });
       if (r.ok) { add("Render is awake ✓", "success"); return; }
-    } catch(e) { /* still waking */ }
-    if (i < maxAttempts - 1) {
-      add(`Render waking… attempt ${i + 2}/${maxAttempts}`, "info");
-      await new Promise(res => setTimeout(res, 5000));
-    }
+    } catch(e) { /* still starting up */ }
   }
-  // Proceed anyway — Render might respond to the real request even if / timed out
-  add("Render wake check timed out — attempting assembly anyway", "warn");
+  add("Render taking longer than usual — proceeding anyway", "warn");
 }
 
 async function callCouncil(category, add) {
