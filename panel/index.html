@@ -13,12 +13,12 @@
     body {
       background: #0a0703;
       font-family: Georgia, 'Times New Roman', serif;
-      color: #e8d5a0;
+      color: #f5e9c8;
       min-height: 100vh;
     }
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: #080604; }
-    ::-webkit-scrollbar-thumb { background: #3a2508; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: #6a4820; border-radius: 3px; }
     @keyframes pulse { 0%,100% { opacity:1; box-shadow: 0 0 8px #d4a017; } 50% { opacity:0.5; box-shadow: 0 0 3px #d4a017; } }
     @keyframes fadein { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -96,15 +96,32 @@ async function callVoiceAndImage(sid, add) {
   add("Image generated ✓", "success");
 }
 
-async function callAssemble(sid, add) {
+async function callAssemble(sid, add, onVideoReady) {
   add("Triggering assembly…", "step");
   const r = await fetch(`${RENDER}/assemble`, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) });
   if (!r.ok) {
     const t = await r.text();
     throw new Error(`Assembly trigger failed HTTP ${r.status}: ${t.slice(0,200)}`);
   }
-  add("Assembly running in background ✓", "success");
-  add("Video will be published to YouTube automatically in ~3 minutes.", "info");
+  add("Assembly started ✓ — polling for completion…", "success");
+
+  // Poll /video-status every 12s for up to 5 minutes
+  for (let i = 0; i < 25; i++) {
+    await new Promise(res => setTimeout(res, 12000));
+    add(`Waiting for video… (${(i+1)*12}s)`, "info");
+    try {
+      const sr = await fetch(`${RENDER}/video-status?script_id=${sid}`, { headers: H });
+      if (sr.ok) {
+        const sd = await sr.json();
+        if (sd.ready && sd.video_url) {
+          add("Video assembled ✓", "success");
+          if (onVideoReady) onVideoReady(sid, sd.video_url);
+          return sd.video_url;
+        }
+      }
+    } catch(e) { /* keep polling */ }
+  }
+  add("Assembly taking longer than expected — check Render logs", "warn");
 }
 
 
@@ -114,6 +131,15 @@ async function callPublish(sid, add) {
   const d = await r.json();
   if (d.error) throw new Error(d.error);
   add("Published to YouTube ✓", "success");
+  return d;
+}
+
+async function callPublishInstagram(sid, add) {
+  add("Publishing to Instagram…", "step");
+  const r = await fetch(`${RENDER}/publish-instagram`, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error);
+  add("Published to Instagram ✓", "success");
   return d;
 }
 
@@ -133,7 +159,7 @@ function StatusPill({ status }) {
 function CatPicker({ value, onChange }) {
   return (
     <div>
-      <div style={{ fontSize:11, letterSpacing:"0.2em", color:"#4a3010", textTransform:"uppercase", marginBottom:8 }}>Category</div>
+      <div style={{ fontSize:11, letterSpacing:"0.2em", color:"#a07840", textTransform:"uppercase", marginBottom:8 }}>Category</div>
       <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
         {CATS.map(c => (
           <button key={c} onClick={()=>onChange(c)} style={{
@@ -164,7 +190,7 @@ function Modal({ show, title, icon, onClose, children }) {
           <span style={{ fontSize:22 }}>{icon}</span>
           <span style={{ fontSize:20, fontWeight:700, color:"#d4a017" }}>{title}</span>
           <button onClick={onClose} style={{ marginLeft:"auto", background:"none", border:"none",
-            color:"#4a3010", cursor:"pointer", fontSize:18, lineHeight:1 }}>✕</button>
+            color:"#a07840", cursor:"pointer", fontSize:18, lineHeight:1 }}>✕</button>
         </div>
         {children}
       </div>
@@ -176,25 +202,25 @@ function LogConsole({ logs, onClear }) {
   const ref = useRef(null);
   useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [logs]);
 
-  const colors = { step:"#64b5f6", success:"#81c784", error:"#e57373", warn:"#ffb74d", info:"#c9b99a", id:"#ffd54f" };
+  const colors = { step:"#90caf9", success:"#a5d6a7", error:"#ef9a9a", warn:"#ffcc80", info:"#e8d5a0", id:"#ffe082" };
   const icons  = { step:"›", success:"✓", error:"✗", warn:"!", info:" ", id:"#" };
 
   return (
-    <div style={{ background:"#07050200", border:"1px solid #1e1508", borderRadius:12,
+    <div style={{ background:"#07050200", border:"1px solid #3a2810", borderRadius:12,
       overflow:"hidden", maxWidth:680, margin:"0 auto" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
         padding:"10px 16px", borderBottom:"1px solid #1e1508", background:"#08060300" }}>
-        <span style={{ fontSize:10, letterSpacing:"0.25em", color:"#3a2508", textTransform:"uppercase" }}>Console Output</span>
-        <button onClick={onClear} style={{ background:"none", border:"none", color:"#2a1c08",
+        <span style={{ fontSize:10, letterSpacing:"0.25em", color:"#9a6828", textTransform:"uppercase" }}>Console Output</span>
+        <button onClick={onClear} style={{ background:"none", border:"none", color:"#8a6828",
           cursor:"pointer", fontSize:11, letterSpacing:"0.1em" }}>CLEAR</button>
       </div>
       <div ref={ref} style={{ minHeight:180, maxHeight:340, overflowY:"auto", padding:"14px 16px" }}>
         {logs.length === 0
-          ? <div style={{ color:"#1e1508", fontFamily:"monospace", fontSize:12 }}>Awaiting command…</div>
+          ? <div style={{ color:"#7a5820", fontFamily:"monospace", fontSize:12 }}>Awaiting command…</div>
           : logs.map(l => (
             <div key={l.id} style={{ display:"flex", gap:10, marginBottom:4,
               fontFamily:"monospace", fontSize:12, animation:"fadein 0.15s ease" }}>
-              <span style={{ color:"#2a1c08", flexShrink:0, minWidth:70 }}>{l.ts}</span>
+              <span style={{ color:"#8a6828", flexShrink:0, minWidth:70 }}>{l.ts}</span>
               <span style={{ color: colors[l.type]||"#c9b99a", flexShrink:0 }}>{icons[l.type]||" "}</span>
               <span style={{ color: colors[l.type]||"#c9b99a", wordBreak:"break-all" }}>{l.msg}</span>
             </div>
@@ -210,6 +236,8 @@ function App() {
   const { logs, add, clear } = useLog();
   const [busy, setBusy]           = useState(false);
   const [status, setStatus]       = useState("idle");
+  const [assembled, setAssembled] = useState(null); // {sid, url}
+  const [publishing, setPublishing] = useState(false);
 
   // Assemble modal
   const [showAssemble, setShowAssemble] = useState(false);
@@ -235,7 +263,7 @@ function App() {
         add(`Using existing script: ${sid}`, "id");
       }
       await wakeRender(add);
-      await callAssemble(sid, add);
+      await callAssemble(sid, add, (sid, url) => setAssembled({sid, url}));
       setStatus("success");
       add("Done ✓", "success");
     } catch(e) {
@@ -252,10 +280,9 @@ function App() {
       const sid = await callCouncil(fCategory, add);
       await callVoiceAndImage(sid, add);
       await wakeRender(add);
-      await callAssemble(sid, add);
-      // Publish is triggered automatically by assemble_job on Render
+      await callAssemble(sid, add, (sid, url) => setAssembled({sid, url}));
       setStatus("success");
-      add("Pipeline complete ✓ — YouTube + Instagram publish running in background.", "success");
+      add("Pipeline complete ✓ — YouTube + Instagram publishing in background.", "success");
     } catch(e) {
       add(`Error: ${e.message}`, "error");
       setStatus("error");
@@ -263,7 +290,7 @@ function App() {
   }
 
   const cardStyle = {
-    background:"#0e0b06", border:"1px solid #2a1c08",
+    background:"#0e0b06", border:"1px solid #4a3418",
     borderRadius:16, padding:28, textAlign:"center",
     boxShadow:"0 4px 32px rgba(0,0,0,0.5)",
     flex:"1 1 200px", maxWidth:240
@@ -293,7 +320,7 @@ function App() {
     flex:1, padding:"9px 0", borderRadius:8, border:"none",
     fontFamily:"Georgia,serif", fontSize:13, cursor:"pointer",
     background: active ? "#8b5e1a" : "#1a1208",
-    color: active ? "#fff2d8" : "#4a3010",
+    color: active ? "#fff2d8" : "#a07840",
     fontWeight: active ? 700 : 400
   });
 
@@ -303,13 +330,13 @@ function App() {
 
       {/* Header */}
       <div style={{ textAlign:"center", marginBottom:44 }}>
-        <div style={{ fontSize:10, letterSpacing:"0.35em", color:"#3a2508", textTransform:"uppercase", marginBottom:6 }}>
+        <div style={{ fontSize:10, letterSpacing:"0.35em", color:"#9a6828", textTransform:"uppercase", marginBottom:6 }}>
           Automated Pipeline
         </div>
         <div style={{ fontSize:36, fontWeight:700, color:"#d4a017", letterSpacing:"0.04em", textShadow:"0 2px 20px rgba(212,160,23,0.2)" }}>
           Mr. Oldverdict
         </div>
-        <div style={{ fontSize:13, color:"#4a3010", marginTop:5, letterSpacing:"0.08em" }}>
+        <div style={{ fontSize:13, color:"#a07840", marginTop:5, letterSpacing:"0.08em" }}>
           Been watching since before.
         </div>
         <div style={{ marginTop:16 }}>
@@ -322,7 +349,7 @@ function App() {
         <div style={cardStyle}>
           <div style={{ fontSize:32, marginBottom:14 }}>🎬</div>
           <div style={{ fontSize:17, fontWeight:700, color:"#d4a017", marginBottom:8 }}>Assemble</div>
-          <div style={{ fontSize:12, color:"#4a3010", marginBottom:22, lineHeight:1.6 }}>
+          <div style={{ fontSize:12, color:"#a07840", marginBottom:22, lineHeight:1.6 }}>
             New script or existing ID.<br/>Build video, skip publish.
           </div>
           <button disabled={busy} onClick={() => setShowAssemble(true)} style={primaryBtn(busy)}>
@@ -333,7 +360,7 @@ function App() {
         <div style={cardStyle}>
           <div style={{ fontSize:32, marginBottom:14 }}>🚀</div>
           <div style={{ fontSize:17, fontWeight:700, color:"#d4a017", marginBottom:8 }}>Full Pipeline</div>
-          <div style={{ fontSize:12, color:"#4a3010", marginBottom:22, lineHeight:1.6 }}>
+          <div style={{ fontSize:12, color:"#a07840", marginBottom:22, lineHeight:1.6 }}>
             Script → Voice → Image<br/>→ Video → YouTube.
           </div>
           <button disabled={busy} onClick={() => setShowFull(true)} style={dangerBtn(busy)}>
@@ -341,6 +368,68 @@ function App() {
           </button>
         </div>
       </div>
+
+      {/* Assembled video card */}
+      {assembled && (
+        <div style={{ maxWidth:680, margin:"0 auto 24px", background:"#0e0b06",
+          border:"1px solid #4a3418", borderRadius:16, padding:24,
+          boxShadow:"0 4px 32px rgba(0,0,0,0.5)", animation:"fadein 0.3s ease" }}>
+          <div style={{ fontSize:11, letterSpacing:"0.2em", color:"#c09050",
+            textTransform:"uppercase", marginBottom:14 }}>Last Assembled Video</div>
+          <div style={{ fontFamily:"monospace", fontSize:11, color:"#a07840",
+            wordBreak:"break-all", marginBottom:18, lineHeight:1.6 }}>
+            Script: {assembled.sid}
+          </div>
+          <a href={assembled.url} target="_blank" rel="noopener noreferrer"
+            style={{ display:"block", padding:"10px 16px", borderRadius:8,
+              background:"#1a1208", border:"1px solid #4a3418", color:"#d4a017",
+              textDecoration:"none", fontFamily:"monospace", fontSize:12,
+              wordBreak:"break-all", marginBottom:18, lineHeight:1.6 }}>
+            {assembled.url}
+          </a>
+          <div style={{ display:"flex", gap:10 }}>
+            <button
+              disabled={publishing}
+              onClick={async () => {
+                setPublishing(true);
+                try {
+                  await callPublish(assembled.sid, add);
+                  add("YouTube publish done ✓", "success");
+                } catch(e) { add("YouTube publish failed: " + e.message, "error"); }
+                finally { setPublishing(false); }
+              }}
+              style={{ flex:1, padding:"10px 0", borderRadius:8, border:"none",
+                fontFamily:"Georgia,serif", fontSize:13, fontWeight:700, cursor: publishing ? "not-allowed" : "pointer",
+                background: publishing ? "#2a1c08" : "linear-gradient(135deg,#8b5e1a,#c4861e)",
+                color: publishing ? "#3a2810" : "#fff2d8" }}>
+              {publishing ? "Publishing…" : "▶ YouTube"}
+            </button>
+            <button
+              disabled={publishing}
+              onClick={async () => {
+                setPublishing(true);
+                try {
+                  await callPublishInstagram(assembled.sid, add);
+                  add("Instagram publish done ✓", "success");
+                } catch(e) { add("Instagram publish failed: " + e.message, "error"); }
+                finally { setPublishing(false); }
+              }}
+              style={{ flex:1, padding:"10px 0", borderRadius:8, border:"none",
+                fontFamily:"Georgia,serif", fontSize:13, fontWeight:700, cursor: publishing ? "not-allowed" : "pointer",
+                background: publishing ? "#2a1c08" : "linear-gradient(135deg,#7b1a6a,#b520a0)",
+                color: publishing ? "#3a2810" : "#ffd8f8" }}>
+              {publishing ? "Publishing…" : "▶ Instagram"}
+            </button>
+            <button
+              onClick={() => setAssembled(null)}
+              style={{ padding:"10px 18px", borderRadius:8, border:"1px solid #3a2810",
+                background:"none", color:"#6a4820", fontFamily:"Georgia,serif",
+                fontSize:13, cursor:"pointer" }}>
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Console */}
       <LogConsole logs={logs} onClear={clear} />
@@ -360,16 +449,16 @@ function App() {
 
         {assembleMode === "old" && (
           <div style={{ marginBottom:20 }}>
-            <div style={{ fontSize:11, letterSpacing:"0.2em", color:"#4a3010", textTransform:"uppercase", marginBottom:8 }}>Script ID</div>
+            <div style={{ fontSize:11, letterSpacing:"0.2em", color:"#a07840", textTransform:"uppercase", marginBottom:8 }}>Script ID</div>
             <input
               value={aScriptId}
               onChange={e => setAScriptId(e.target.value)}
               placeholder="paste UUID here…"
               style={{ width:"100%", padding:"10px 14px", background:"#0a0703",
-                border:"1px solid #3a2508", borderRadius:8, color:"#e8d5a0",
+                border:"1px solid #6a4820", borderRadius:8, color:"#f5e9c8",
                 fontFamily:"monospace", fontSize:13, outline:"none" }}
             />
-            <div style={{ fontSize:11, color:"#3a2508", marginTop:6 }}>
+            <div style={{ fontSize:11, color:"#9a6828", marginTop:6 }}>
               Voice + image must already be generated for this ID.
             </div>
           </div>
@@ -385,8 +474,8 @@ function App() {
         <div style={{ marginBottom:20 }}>
           <CatPicker value={fCategory} onChange={setFCategory} />
         </div>
-        <div style={{ fontSize:12, color:"#4a3010", marginBottom:20, lineHeight:1.7,
-          padding:"12px 14px", background:"#0a0703", borderRadius:8, border:"1px solid #1e1508" }}>
+        <div style={{ fontSize:12, color:"#a07840", marginBottom:20, lineHeight:1.7,
+          padding:"12px 14px", background:"#0a0703", borderRadius:8, border:"1px solid #3a2810" }}>
           Council → Voice + Image → Assembly → YouTube publish.<br/>
           Takes 3–5 minutes. Keep this tab open.
         </div>
