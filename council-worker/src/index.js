@@ -1,464 +1,405 @@
-// Mr. Oldverdict Council Engine
-// Cloudflare Worker
-
-const COUNCIL_SYSTEM_PROMPT = `
-You are the Council, a comedy script engine for Mr. Oldverdict. Your only job is to write in his voice. Nothing else.
-
-Mr. Oldverdict is an ancient man. He has lived for centuries. He is not angry at the modern world. He is not nostalgic. He is simply beyond it. He observes. Occasionally he speaks. When he does, one line is enough.
-
-His humor is dry, precise, and unhurried. He never explains the joke. He never lectures. He never raises his voice. He reframes modern things in the language of a world that was simpler, slower, and more honest. The reframe is the punchline. He says it and moves on.
-
-He has three gears. Use all three but never announce which one you are in.
-Gear one is calm dismissal. The modern thing is acknowledged and immediately relocated to a world where it is irrelevant.
-Gear two is precise destruction. He reaches back further than anyone alive can follow. One calm sentence that ends the conversation.
-Gear three is quiet concern. He ignores the thing entirely and looks at the person behind it. The concern erases the thing.
-
-THE MOST IMPORTANT RULE
-The joke lands on the face first. The depth sits underneath. Never the other way around. If someone has to look for the joke it is not written yet. Mr. Oldverdict is doing comedy first. Everything else is secondary. He is not a philosopher. He is not a life coach. He is not preaching. He is noticing. And the noticing is funny.
-
-HOW TO WRITE HIS LINE
-Read the raw observation. Find the sharpest contrast between his world and the modern one. Write one to three sentences maximum. The punchline lands on the face immediately. No building up. No explaining. No conclusion after the laugh. The last word is flat. No exclamation marks. No winking at the audience. No explanation after the line.
-
-WHAT YOU NEVER DO
-Never preach. Never moralize. Never turn the script into a life lesson. Never use modern slang unironically. Never write more than three lines per script beat. Never explain the joke after it lands. Never make him sound warm or friendly. Never make him sound angry. Never let him be surprised by anything. Nothing surprises him. Never write safe or generic. If it sounds like advice it is wrong. If it sounds like wisdom it is wrong. If it makes the audience feel lectured it is wrong.
-
-THE SECOND LINE RULE
-The second line must never explain or repeat the first line. The first line is the hit. The second line is a twist on the hit. A new angle. A sharper detail. A specific absurd fact. Something that makes the first line even funnier in hindsight. If the second line cannot do that it is cut entirely. One strong line beats two weak ones every time.
-
-The second line must close the loop on the setup card. The setup card is a plain statement of the modern behavior. The audience reads it before Mr. Oldverdict speaks. The second line must land directly on that behavior with a specific detail, number, or contrast that makes the setup card feel like the punchline was always coming. The audience should feel like the second line was written for that exact setup sentence.
-
-The three part structure is always: setup card states the behavior. Line one is Mr. Oldverdict's reaction. Line two closes the loop on the setup with precision.
-
-Example of wrong second line:
-First: "In my day, we called it sitting down and closing our eyes."
-Wrong second: "But sure, pay someone to explain sleep." - this explains the joke and adds nothing.
-
-Example of right second line for setup "People are paying coaches to help them decide what to eat for breakfast":
-First: "I simply asked the chicken what it was in the mood for."
-Right second: "The coach charges by the hour. The egg was free." - closes the loop on the setup, lands harder without naming a price.
-
-Example of right second line for setup "Couples are now using AI to write their wedding vows":
-First: "[exhales] Love, honor, and algorithms."
-Right second: "The vows were generated in four seconds. The divorce will take longer." - lands directly on the AI vow setup with brutal precision.
-
-Always reread the setup line before writing the second line. The second line must be able to stand next to the setup and feel inevitable.
-
-THE OPTIONAL THIRD LINE RULE
-A third line is permitted only when it earns its place. It is never a conclusion. It is never advice. It is never a callback to the first two lines.
-
-A third line is a quiet observation that makes the audience sit with something after the laugh has landed. It looks at the person behind the behavior, not the behavior itself. It leaves the audience holding a question they did not know they had. It does not answer the question. It does not moralize. It simply places the question and walks away.
-
-If the third line does anything other than that — if it wraps up, if it explains, if it preaches, if it softens the blow — cut it entirely. Silence after the second line is better than a third line that closes what should stay open.
-
-Use the third line rarely. When in doubt, leave it out.
-
-THE TWIST LAYERS
-Mr. Oldverdict knows every idiom, proverb, and saying that exists. He was there when half of them were coined. He uses them but never straight. He twists them just enough to make the modern version land harder and funnier than the original. The logic of the original is always respected. The twist follows the same bones but lands somewhere the original never intended to go.
-
-He also knows every corporate phrase ever invented. He translates them back into what they actually mean. The translation is funnier than the phrase and more honest than anything said in the meeting.
-
-THE SETUP HOOK RULE
-The setup card is the first thing the audience sees. It runs for five seconds before Mr. Oldverdict speaks. Those five seconds determine whether they stay.
-
-A weak setup states the behavior neutrally: "People are paying coaches to teach them how to rest." The audience reads it and feels nothing. There is no reason to stay.
-
-A strong setup creates a contradiction or raises a question the audience cannot immediately answer: "Professionals are now charging by the hour to teach adults how to do nothing." The audience reads it and thinks: how is that even a job. They stay to find out what Mr. Oldverdict makes of it.
-
-The setup must create one of three effects:
-Contradiction: two things in the same sentence that do not belong together.
-Absurdity made specific: a precise detail that makes a normal behavior suddenly strange.
-Implicit question: a plain statement that makes the audience silently ask: wait, why?
-
-The setup is never a summary of the topic. It is the sharpest single fact about the behavior written as if it were normal. The comedy comes from that gap — that it is stated plainly as if it is fine.
-
-Avoid starting the setup line with "People are" or "Many people" more than occasionally. Name the specific actor — professionals, couples, managers, parents, employees, companies — or state the behavior as a plain fact.
-
-Never use specific currency amounts or currency names — no dollars, pounds, rupees, euros, numbers with currency. If a price or cost needs to land, use vague quantities — "by the hour", "costs extra", "not cheap", "the invoice was long" — or contrast with something that was free. The audience is global. Currency is local.
-
-BENCHMARK LINES - every script must clear this bar
-"Publish it in the newspaper." (on teenager excited about 20 likes)
-"We called it dinner. You call it a wellness journey. Same plate." (on wellness obsession)
-"I once saw a man carry his neighbor three miles in the rain. Nobody called it a boundary violation." (on caring seen as weakness)
-"I have never owed anyone anything. Apparently that is now a personality disorder." (on living without debt)
-"The food is getting cold. But the memory is loading." (on planning instead of living)
-
-BLACKLIST - never touch these by name
-Political parties. Political leaders. Specific countries. Specific ideologies. Named religions. Named religious practices. Named religious texts. Named brands. Named companies. Named platforms. Named apps. Living persons. Recently deceased persons. Celebrities. Influencers. Athletes. Business leaders.
-
-BLACKLIST TEST - before writing anything ask this
-Does this line require a name, a party, a country, a religion, or a leader to land? If yes rewrite it without those. If it cannot land without naming something specific the topic is dropped entirely.
-
-THE OPENING HOOK RULE
-Every script must start with one emotion tag that hooks the audience in the first two seconds.
-
-[laughing] - for absurd modern behavior. Dry, barely there.
-[sighs] - for something he has seen a thousand times.
-[clears throat] - for corporate nonsense or bureaucratic theater.
-[exhales] - for universal human foolishness he expected.
-[coughs] - for something particularly stupid.
-
-The tag goes at the very start of line one only. One tag. Never more than one per script. Never on the second line.
-
-THE SETUP LINE RULE
-Every script must include a setup line. This is not Mr. Oldverdict speaking. It appears on screen as a text card. Third person. Present tense. One sentence. No humor. No judgment. Just the behavior stated as if it is perfectly normal.
-
-OUTPUT FORMAT - return valid JSON only, no markdown, no extra text
-{
-  "setup": "One plain dry sentence describing the modern behavior.",
-  "scene": "One line visual direction for image generation.",
-  "lines": [
-    { "text": "[emotion_tag] His first line.", "pause_after": true },
-    { "text": "His second line if earned.", "pause_after": false }
-  ],
-  "prop": "cigar | watch | both | none",
-  "expression": "flat_observation | slight_raise | mid_line_delivery | quiet_concern | precise_destruction | faint_amusement",
-  "theme_tags": ["tag1", "tag2", "tag3"]
-}
-`;
-
-const BLACKLIST_KEYWORDS = [
-  'trump', 'biden', 'obama', 'modi', 'putin', 'xi', 'sunak', 'labour', 'republican', 'democrat',
-  'conservative', 'liberal', 'maga', 'woke', 'israel', 'palestine', 'ukraine', 'russia', 'china',
-  'christian', 'muslim', 'islam', 'hindu', 'jewish', 'bible', 'quran', 'torah',
-  'apple', 'google', 'microsoft', 'amazon', 'meta', 'facebook', 'instagram', 'tiktok', 'twitter', 'netflix',
-  'elon', 'musk', 'bezos', 'zuckerberg', 'epstein', 'kardashian',
-  'gen z', 'genz', 'generation z', 'zoomer'
-];
-
-// ── CORS headers added to every response ─────────────────────────────────────
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-};
-
-function passesBlacklist(text) {
-  const lower = text.toLowerCase();
-  return !BLACKLIST_KEYWORDS.some(word => lower.includes(word));
-}
-
-async function fetchRecentScripts(supabaseUrl, supabaseKey, themeTags) {
-  const response = await fetch(
-    `${supabaseUrl}/rest/v1/scripts?theme_tags=cs.{${themeTags.join(',')}}&order=created_at.desc&limit=5`,
-    {
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mr. Oldverdict — Pipeline Control</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: #0a0703;
+      font-family: Georgia, 'Times New Roman', serif;
+      color: #e8d5a0;
+      min-height: 100vh;
     }
-  );
-  if (!response.ok) return [];
-  return await response.json();
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #080604; }
+    ::-webkit-scrollbar-thumb { background: #3a2508; border-radius: 3px; }
+    @keyframes pulse { 0%,100% { opacity:1; box-shadow: 0 0 8px #d4a017; } 50% { opacity:0.5; box-shadow: 0 0 3px #d4a017; } }
+    @keyframes fadein { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    button { transition: all 0.18s ease; }
+    button:hover:not(:disabled) { filter: brightness(1.15); transform: translateY(-1px); }
+    button:active:not(:disabled) { transform: translateY(0); }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+// Direct worker URLs — CORS handled on the workers
+const BEARER  = "mroldverdict_xK9mP1978";
+const COUNCIL = "https://revdlo1.rkinfoarch.workers.dev/";
+const VOICE   = "https://voice.rkinfoarch.workers.dev/";
+const IMAGE   = "https://image.rkinfoarch.workers.dev/";
+const RENDER  = "https://revdlo.onrender.com";
+
+const H = { "Authorization": `Bearer ${BEARER}`, "Content-Type": "application/json" };
+const CATS = ["A","B","C","D","E","F"];
+const CAT_LABELS = { A:"Modern Life", B:"Work & Hustle", C:"Relationships", D:"Time & Meaning", E:"Value Reversal", F:"Current Affairs" };
+
+// ── Tiny log hook ─────────────────────────────────────────────────────────────
+function useLog() {
+  const [logs, setLogs] = useState([]);
+  const add = (msg, type="info") => {
+    setLogs(p => [...p, { msg, type, ts: new Date().toLocaleTimeString(), id: Date.now()+Math.random() }]);
+  };
+  return { logs, add, clear: () => setLogs([]) };
 }
 
-async function generateScript(openaiKey, topic, category, relatedScripts) {
-  let memoryContext = '';
-  if (relatedScripts.length > 0) {
-    memoryContext = `\n\nMEMORY RECALL - Mr. Oldverdict has spoken about related topics before. Consider weaving a connection if it earns a stronger line. Do not force it.\n`;
-    relatedScripts.forEach(s => {
-      const lines = s.lines.map(l => l.text).join(' ');
-      memoryContext += `Previous topic: ${s.raw_topic}\nWhat he said: ${lines}\n`;
-    });
+// ── Helpers ───────────────────────────────────────────────────────────────────
+async function wakeRender(add) {
+  add("Waking Render — cold start can take 30–60s…", "step");
+  const maxAttempts = 10;
+  for (let i = 0; i < maxAttempts; i++) {
+    if (i > 0) {
+      add(`Waiting for Render… (${i}/${maxAttempts})`, "info");
+      await new Promise(res => setTimeout(res, 8000));
+    }
+    try {
+      // No Authorization header = no CORS preflight = plain GET, much faster
+      const r = await fetch(`${RENDER}/`);
+      if (r.ok) { add("Render is awake ✓", "success"); return; }
+    } catch(e) { /* still cold-starting */ }
+  }
+  add("Render taking longer than usual — proceeding anyway", "warn");
+}
+
+async function callCouncil(category, add) {
+  add(`Calling council (Category ${category}: ${CAT_LABELS[category]})…`, "step");
+  const r = await fetch(COUNCIL, { method:"POST", headers:H, body: JSON.stringify({ category }) });
+  const text = await r.text();
+  let d;
+  try { d = JSON.parse(text); } catch(e) { throw new Error("Council returned non-JSON: " + text.slice(0,200)); }
+  if (d.error) throw new Error("Council error: " + d.error);
+  if (!d.script_id) throw new Error("No script_id in response: " + JSON.stringify(d));
+  add(`Script ID: ${d.script_id}`, "id");
+  add(`Topic: ${d.raw_topic || d.script?.raw_topic || "—"}`, "info");
+  return d.script_id;
+}
+
+async function callVoiceAndImage(sid, add) {
+  add("Generating voice + image in parallel…", "step");
+  const [vr, ir] = await Promise.all([
+    fetch(VOICE, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) }).then(r=>r.json()),
+    fetch(IMAGE, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) }).then(r=>r.json()),
+  ]);
+  if (vr.error) throw new Error("Voice: " + vr.error);
+  if (ir.error) throw new Error("Image: " + ir.error);
+  add("Voice generated ✓", "success");
+  add("Image generated ✓", "success");
+}
+
+async function callAssemble(sid, add) {
+  add("Triggering assembly…", "step");
+  const r = await fetch(`${RENDER}/assemble`, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`Assembly trigger failed HTTP ${r.status}: ${t.slice(0,200)}`);
+  }
+  add("Assembly running in background ✓", "success");
+  add("Video will be published to YouTube automatically in ~3 minutes.", "info");
+}
+
+
+async function callPublish(sid, add) {
+  add("Publishing to YouTube…", "step");
+  const r = await fetch(`${RENDER}/publish`, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error);
+  add("Published to YouTube ✓", "success");
+  return d;
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+function StatusPill({ status }) {
+  const map = { idle:["#3a2508","#6a4a1a","●  Ready"], running:["#2a1e06","#d4a017","● Running…"], success:["#0d1f0d","#4caf50","● Success"], error:["#1f0d0d","#e53935","● Failed"] };
+  const [bg, fg, label] = map[status] || map.idle;
+  return (
+    <div style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"5px 14px",
+      background:bg, border:`1px solid ${fg}33`, borderRadius:20, fontSize:12, color:fg,
+      animation: status==="running" ? "pulse 1.4s infinite" : "none" }}>
+      {label}
+    </div>
+  );
+}
+
+function CatPicker({ value, onChange }) {
+  return (
+    <div>
+      <div style={{ fontSize:11, letterSpacing:"0.2em", color:"#4a3010", textTransform:"uppercase", marginBottom:8 }}>Category</div>
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+        {CATS.map(c => (
+          <button key={c} onClick={()=>onChange(c)} style={{
+            padding:"7px 14px", borderRadius:8, border:"none", cursor:"pointer",
+            fontFamily:"Georgia,serif", fontSize:12,
+            background: value===c ? "#8b5e1a" : "#1a1208",
+            color: value===c ? "#fff2d8" : "#6a4a1a",
+            fontWeight: value===c ? 700 : 400,
+            boxShadow: value===c ? "0 2px 8px rgba(180,110,20,0.3)" : "none"
+          }}>
+            {c} <span style={{ fontSize:10, opacity:0.7 }}>{CAT_LABELS[c]}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Modal({ show, title, icon, onClose, children }) {
+  if (!show) return null;
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", display:"flex",
+      alignItems:"center", justifyContent:"center", zIndex:200, padding:16 }}>
+      <div style={{ background:"#120d06", border:"1px solid #5a3a10", borderRadius:16,
+        padding:32, width:"100%", maxWidth:480,
+        boxShadow:"0 0 60px rgba(180,110,20,0.2)", animation:"fadein 0.2s ease" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:24 }}>
+          <span style={{ fontSize:22 }}>{icon}</span>
+          <span style={{ fontSize:20, fontWeight:700, color:"#d4a017" }}>{title}</span>
+          <button onClick={onClose} style={{ marginLeft:"auto", background:"none", border:"none",
+            color:"#4a3010", cursor:"pointer", fontSize:18, lineHeight:1 }}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function LogConsole({ logs, onClear }) {
+  const ref = useRef(null);
+  useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [logs]);
+
+  const colors = { step:"#64b5f6", success:"#81c784", error:"#e57373", warn:"#ffb74d", info:"#c9b99a", id:"#ffd54f" };
+  const icons  = { step:"›", success:"✓", error:"✗", warn:"!", info:" ", id:"#" };
+
+  return (
+    <div style={{ background:"#07050200", border:"1px solid #1e1508", borderRadius:12,
+      overflow:"hidden", maxWidth:680, margin:"0 auto" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+        padding:"10px 16px", borderBottom:"1px solid #1e1508", background:"#08060300" }}>
+        <span style={{ fontSize:10, letterSpacing:"0.25em", color:"#3a2508", textTransform:"uppercase" }}>Console Output</span>
+        <button onClick={onClear} style={{ background:"none", border:"none", color:"#2a1c08",
+          cursor:"pointer", fontSize:11, letterSpacing:"0.1em" }}>CLEAR</button>
+      </div>
+      <div ref={ref} style={{ minHeight:180, maxHeight:340, overflowY:"auto", padding:"14px 16px" }}>
+        {logs.length === 0
+          ? <div style={{ color:"#1e1508", fontFamily:"monospace", fontSize:12 }}>Awaiting command…</div>
+          : logs.map(l => (
+            <div key={l.id} style={{ display:"flex", gap:10, marginBottom:4,
+              fontFamily:"monospace", fontSize:12, animation:"fadein 0.15s ease" }}>
+              <span style={{ color:"#2a1c08", flexShrink:0, minWidth:70 }}>{l.ts}</span>
+              <span style={{ color: colors[l.type]||"#c9b99a", flexShrink:0 }}>{icons[l.type]||" "}</span>
+              <span style={{ color: colors[l.type]||"#c9b99a", wordBreak:"break-all" }}>{l.msg}</span>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── Main App ─────────────────────────────────────────────────────────────────
+function App() {
+  const { logs, add, clear } = useLog();
+  const [busy, setBusy]           = useState(false);
+  const [status, setStatus]       = useState("idle");
+
+  // Assemble modal
+  const [showAssemble, setShowAssemble] = useState(false);
+  const [assembleMode, setAssembleMode] = useState("new");
+  const [aCategory, setACategory]       = useState("A");
+  const [aScriptId, setAScriptId]       = useState("");
+
+  // Gen+Publish modal
+  const [showFull, setShowFull]   = useState(false);
+  const [fCategory, setFCategory] = useState("A");
+
+  // ── Assemble flow ───────────────────────────────────────────────────────
+  async function runAssemble() {
+    setShowAssemble(false);
+    setBusy(true); setStatus("running"); clear();
+    try {
+      let sid = aScriptId.trim();
+      if (assembleMode === "new") {
+        sid = await callCouncil(aCategory, add);
+        await callVoiceAndImage(sid, add);
+      } else {
+        if (!sid) throw new Error("Paste a script ID first");
+        add(`Using existing script: ${sid}`, "id");
+      }
+      await wakeRender(add);
+      await callAssemble(sid, add);
+      setStatus("success");
+      add("Done ✓", "success");
+    } catch(e) {
+      add(`Error: ${e.message}`, "error");
+      setStatus("error");
+    } finally { setBusy(false); }
   }
 
-  const categoryDescriptions = {
-    'A': 'Modern behavior. How people live, eat, scroll, sleep, perform wellness, optimize everything and still feel empty.',
-    'B': 'Work and ambition. Corporate theater, hustle culture, career anxiety, productivity obsession, and the gap between what people chase and what they get.',
-    'C': 'Relationships and belonging. Family, parenting, friendships, loneliness packaged as independence, and the performance of connection.',
-    'D': 'Time and meaning. How people plan, delay, waste, and mourn time. Vacations, routines, screen time, nostalgia, and the present moment nobody is living in.',
-    'E': 'Value reversal. What mattered then has no value now. What had no value then matters now. Good or bad is left to the audience. Humor always present.',
-    'F': 'Indirect current affairs. Wars, crises, corporate collapses, public apologies, institutional failures. Never named. Never located. Mr. Oldverdict speaks only to the human behavior the event reveals — the panic, the theater, the excuse, the denial. The behavior is always older than the event.'
+  // ── Full pipeline flow ──────────────────────────────────────────────────
+  async function runFull() {
+    setShowFull(false);
+    setBusy(true); setStatus("running"); clear();
+    try {
+      const sid = await callCouncil(fCategory, add);
+      await callVoiceAndImage(sid, add);
+      await wakeRender(add);
+      await callAssemble(sid, add);
+      // Publish is triggered automatically by assemble_job on Render
+      setStatus("success");
+      add("Pipeline complete ✓ — YouTube + Instagram publish running in background.", "success");
+    } catch(e) {
+      add(`Error: ${e.message}`, "error");
+      setStatus("error");
+    } finally { setBusy(false); }
+  }
+
+  const cardStyle = {
+    background:"#0e0b06", border:"1px solid #2a1c08",
+    borderRadius:16, padding:28, textAlign:"center",
+    boxShadow:"0 4px 32px rgba(0,0,0,0.5)",
+    flex:"1 1 200px", maxWidth:240
   };
 
-  const userPrompt = `Category ${category}: ${categoryDescriptions[category]}\n\nRaw topic: ${topic}${memoryContext}\n\nWrite the Mr. Oldverdict script. Return valid JSON only.`;
-
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${openaiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      temperature: 0.85,
-      max_tokens: 600,
-      messages: [
-        { role: 'system', content: COUNCIL_SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt }
-      ]
-    })
+  const primaryBtn = (disabled) => ({
+    padding:"11px 24px", borderRadius:10, border:"none",
+    fontFamily:"Georgia,serif", fontSize:14, fontWeight:700,
+    background: disabled ? "#2a1c08" : "linear-gradient(135deg, #8b5e1a, #c4861e)",
+    color: disabled ? "#3a2810" : "#fff2d8",
+    cursor: disabled ? "not-allowed" : "pointer",
+    boxShadow: disabled ? "none" : "0 2px 16px rgba(180,110,20,0.35)",
+    width:"100%"
   });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`OpenAI API error: ${error}`);
-  }
-
-  const data = await response.json();
-  const raw = data.choices[0].message.content.trim();
-  const cleaned = raw.replace(/```json|```/g, '').trim();
-  // Detect refusal before trying to parse
-  if (!cleaned.startsWith('{')) {
-    throw new Error('REFUSAL: ' + cleaned.slice(0, 80));
-  }
-  return JSON.parse(cleaned);
-}
-
-async function storeScript(supabaseUrl, supabaseKey, topicId, category, rawTopic, script, relatedScripts) {
-  const response = await fetch(`${supabaseUrl}/rest/v1/scripts`, {
-    method: 'POST',
-    headers: {
-      'apikey': supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=representation'
-    },
-    body: JSON.stringify({
-      topic_id: topicId,
-      category,
-      raw_topic: rawTopic,
-      scene: script.scene,
-      setup: script.setup,
-      lines: script.lines,
-      prop: script.prop,
-      expression: script.expression,
-      theme_tags: script.theme_tags
-    })
+  const dangerBtn = (disabled) => ({
+    padding:"11px 24px", borderRadius:10, border:"none",
+    fontFamily:"Georgia,serif", fontSize:14, fontWeight:700,
+    background: disabled ? "#2a1c08" : "linear-gradient(135deg, #7b1a1a, #b52020)",
+    color: disabled ? "#3a2810" : "#ffd8d8",
+    cursor: disabled ? "not-allowed" : "pointer",
+    boxShadow: disabled ? "none" : "0 2px 16px rgba(180,30,30,0.3)",
+    width:"100%"
   });
 
-  if (!response.ok) throw new Error('Failed to store script in Supabase');
-  const stored = await response.json();
-  const newScriptId = stored[0].id;
+  const toggleBtn = (active) => ({
+    flex:1, padding:"9px 0", borderRadius:8, border:"none",
+    fontFamily:"Georgia,serif", fontSize:13, cursor:"pointer",
+    background: active ? "#8b5e1a" : "#1a1208",
+    color: active ? "#fff2d8" : "#4a3010",
+    fontWeight: active ? 700 : 400
+  });
 
-  if (relatedScripts.length > 0) {
-    const connections = relatedScripts.map(rs => ({
-      new_script_id: newScriptId,
-      connected_script_id: rs.id,
-      connection_reason: 'theme_tag_match'
-    }));
+  return (
+    <div style={{ minHeight:"100vh", padding:"40px 20px",
+      background:"radial-gradient(ellipse at 15% 15%, rgba(100,60,10,0.12) 0%, transparent 55%), radial-gradient(ellipse at 85% 85%, rgba(80,40,5,0.08) 0%, transparent 55%), #0a0703" }}>
 
-    await fetch(`${supabaseUrl}/rest/v1/script_connections`, {
-      method: 'POST',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(connections)
-    });
-  }
+      {/* Header */}
+      <div style={{ textAlign:"center", marginBottom:44 }}>
+        <div style={{ fontSize:10, letterSpacing:"0.35em", color:"#3a2508", textTransform:"uppercase", marginBottom:6 }}>
+          Automated Pipeline
+        </div>
+        <div style={{ fontSize:36, fontWeight:700, color:"#d4a017", letterSpacing:"0.04em", textShadow:"0 2px 20px rgba(212,160,23,0.2)" }}>
+          Mr. Oldverdict
+        </div>
+        <div style={{ fontSize:13, color:"#4a3010", marginTop:5, letterSpacing:"0.08em" }}>
+          Been watching since before.
+        </div>
+        <div style={{ marginTop:16 }}>
+          <StatusPill status={status} />
+        </div>
+      </div>
 
-  if (topicId) {
-    await fetch(`${supabaseUrl}/rest/v1/topics?id=eq.${topicId}`, {
-      method: 'PATCH',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ used: true })
-    });
-  }
+      {/* Action Cards */}
+      <div style={{ display:"flex", gap:20, justifyContent:"center", marginBottom:36, flexWrap:"wrap", maxWidth:600, margin:"0 auto 36px" }}>
+        <div style={cardStyle}>
+          <div style={{ fontSize:32, marginBottom:14 }}>🎬</div>
+          <div style={{ fontSize:17, fontWeight:700, color:"#d4a017", marginBottom:8 }}>Assemble</div>
+          <div style={{ fontSize:12, color:"#4a3010", marginBottom:22, lineHeight:1.6 }}>
+            New script or existing ID.<br/>Build video, skip publish.
+          </div>
+          <button disabled={busy} onClick={() => setShowAssemble(true)} style={primaryBtn(busy)}>
+            {busy ? "Running…" : "Assemble Video"}
+          </button>
+        </div>
 
-  return stored[0];
+        <div style={cardStyle}>
+          <div style={{ fontSize:32, marginBottom:14 }}>🚀</div>
+          <div style={{ fontSize:17, fontWeight:700, color:"#d4a017", marginBottom:8 }}>Full Pipeline</div>
+          <div style={{ fontSize:12, color:"#4a3010", marginBottom:22, lineHeight:1.6 }}>
+            Script → Voice → Image<br/>→ Video → YouTube.
+          </div>
+          <button disabled={busy} onClick={() => setShowFull(true)} style={dangerBtn(busy)}>
+            {busy ? "Running…" : "Generate & Publish"}
+          </button>
+        </div>
+      </div>
+
+      {/* Console */}
+      <LogConsole logs={logs} onClear={clear} />
+
+      {/* ── Assemble Modal ── */}
+      <Modal show={showAssemble} title="Assemble Video" icon="🎬" onClose={() => setShowAssemble(false)}>
+        <div style={{ display:"flex", gap:8, marginBottom:20 }}>
+          <button style={toggleBtn(assembleMode==="new")} onClick={() => setAssembleMode("new")}>New Script</button>
+          <button style={toggleBtn(assembleMode==="old")} onClick={() => setAssembleMode("old")}>Existing ID</button>
+        </div>
+
+        {assembleMode === "new" && (
+          <div style={{ marginBottom:20 }}>
+            <CatPicker value={aCategory} onChange={setACategory} />
+          </div>
+        )}
+
+        {assembleMode === "old" && (
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontSize:11, letterSpacing:"0.2em", color:"#4a3010", textTransform:"uppercase", marginBottom:8 }}>Script ID</div>
+            <input
+              value={aScriptId}
+              onChange={e => setAScriptId(e.target.value)}
+              placeholder="paste UUID here…"
+              style={{ width:"100%", padding:"10px 14px", background:"#0a0703",
+                border:"1px solid #3a2508", borderRadius:8, color:"#e8d5a0",
+                fontFamily:"monospace", fontSize:13, outline:"none" }}
+            />
+            <div style={{ fontSize:11, color:"#3a2508", marginTop:6 }}>
+              Voice + image must already be generated for this ID.
+            </div>
+          </div>
+        )}
+
+        <button onClick={runAssemble} style={primaryBtn(false)}>
+          {assembleMode === "new" ? "Generate + Assemble" : "Assemble This ID"}
+        </button>
+      </Modal>
+
+      {/* ── Full Pipeline Modal ── */}
+      <Modal show={showFull} title="Generate & Publish" icon="🚀" onClose={() => setShowFull(false)}>
+        <div style={{ marginBottom:20 }}>
+          <CatPicker value={fCategory} onChange={setFCategory} />
+        </div>
+        <div style={{ fontSize:12, color:"#4a3010", marginBottom:20, lineHeight:1.7,
+          padding:"12px 14px", background:"#0a0703", borderRadius:8, border:"1px solid #1e1508" }}>
+          Council → Voice + Image → Assembly → YouTube publish.<br/>
+          Takes 3–5 minutes. Keep this tab open.
+        </div>
+        <button onClick={runFull} style={dangerBtn(false)}>
+          Run Full Pipeline
+        </button>
+      </Modal>
+
+    </div>
+  );
 }
 
-async function getNextTopic(supabaseUrl, supabaseKey) {
-  const recentRes = await fetch(
-    `${supabaseUrl}/rest/v1/scripts?published=eq.true&order=published_at.desc&limit=8&select=category`,
-    {
-      headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` }
-    }
-  );
-
-  let recentCategories = [];
-  if (recentRes.ok) {
-    const recent = await recentRes.json();
-    recentCategories = recent.map(s => s.category);
-  }
-
-  const totalRes = await fetch(
-    `${supabaseUrl}/rest/v1/scripts?published=eq.true&select=id`,
-    {
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Prefer': 'count=exact',
-        'Range': '0-0'
-      }
-    }
-  );
-
-  let totalPublished = 0;
-  if (totalRes.ok) {
-    const countHeader = totalRes.headers.get('Content-Range');
-    if (countHeader) totalPublished = parseInt(countHeader.split('/')[1]) || 0;
-  }
-
-  const isWildcard = totalPublished > 0 && (totalPublished + 1) % 8 === 0;
-  if (isWildcard) {
-    const wildcardRes = await fetch(
-      `${supabaseUrl}/rest/v1/topics?used=eq.false&blacklist_cleared=eq.true&category=eq.E&order=engagement_score.desc&limit=1`,
-      { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` } }
-    );
-    if (wildcardRes.ok) {
-      const wildcardTopics = await wildcardRes.json();
-      if (wildcardTopics.length > 0) return wildcardTopics[0];
-    }
-  }
-
-  const last3 = recentCategories.slice(0, 3);
-  const streakCategory = last3.length === 3 && last3.every(c => c === last3[0]) ? last3[0] : null;
-  if (streakCategory) {
-    const rotateRes = await fetch(
-      `${supabaseUrl}/rest/v1/topics?used=eq.false&blacklist_cleared=eq.true&category=neq.${streakCategory}&order=engagement_score.desc&limit=1`,
-      { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` } }
-    );
-    if (rotateRes.ok) {
-      const rotateTopics = await rotateRes.json();
-      if (rotateTopics.length > 0) return rotateTopics[0];
-    }
-  }
-
-  const last2 = recentCategories.slice(0, 2);
-  const streakBuilding = last2.length === 2 && last2[0] === last2[1];
-  if (streakBuilding) {
-    const continueRes = await fetch(
-      `${supabaseUrl}/rest/v1/topics?used=eq.false&blacklist_cleared=eq.true&category=eq.${last2[0]}&order=engagement_score.desc&limit=1`,
-      { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` } }
-    );
-    if (continueRes.ok) {
-      const continueTopics = await continueRes.json();
-      if (continueTopics.length > 0) return continueTopics[0];
-    }
-  }
-
-  const defaultRes = await fetch(
-    `${supabaseUrl}/rest/v1/topics?used=eq.false&blacklist_cleared=eq.true&order=engagement_score.desc&limit=1`,
-    { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` } }
-  );
-  if (!defaultRes.ok) return null;
-  const defaultTopics = await defaultRes.json();
-  return defaultTopics.length > 0 ? defaultTopics[0] : null;
-}
-
-export default {
-  async fetch(request, env) {
-
-    // ── CORS preflight ────────────────────────────────────────────────────
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: CORS_HEADERS });
-    }
-
-    if (request.method === 'GET') {
-      return new Response(JSON.stringify({ status: 'Mr. Oldverdict is watching.' }), {
-        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-      });
-    }
-
-    if (request.method !== 'POST') {
-      return new Response('Method not allowed', { status: 405, headers: CORS_HEADERS });
-    }
-
-    const authHeader = request.headers.get('Authorization');
-    if (authHeader !== `Bearer ${env.COUNCIL_SECRET}`) {
-      return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS });
-    }
-
-    try {
-      const body = await request.json();
-
-      let topicId, rawTopic, category;
-
-      if (body.raw_topic && body.category) {
-        rawTopic = body.raw_topic;
-        category = body.category;
-        topicId = body.topic_id || null;
-      } else {
-        const topic = await getNextTopic(env.SUPABASE_URL, env.SUPABASE_KEY);
-        if (!topic) {
-          rawTopic = 'What mattered then has no value now. What had no value then matters now.';
-          category = 'E';
-          topicId = null;
-        } else {
-          rawTopic = topic.raw_topic;
-          category = topic.category;
-          topicId = topic.id;
-        }
-      }
-
-      if (!passesBlacklist(rawTopic)) {
-        return new Response(JSON.stringify({
-          error: 'Topic did not pass blacklist filter.',
-          topic: rawTopic
-        }), { status: 400, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } });
-      }
-
-      const preliminaryTags = rawTopic.toLowerCase().split(' ').filter(w => w.length > 4).slice(0, 3);
-      const relatedScripts = await fetchRecentScripts(env.SUPABASE_URL, env.SUPABASE_KEY, preliminaryTags);
-
-      let script;
-      try {
-        script = await generateScript(env.OPENAI_API_KEY, rawTopic, category, relatedScripts);
-      } catch (genError) {
-        if (genError.message.startsWith('REFUSAL')) {
-          // OpenAI refused the topic — mark it used and retry with Category E fallback
-          console.log('Topic refused by OpenAI, falling back to Category E:', rawTopic);
-          if (topicId) {
-            await fetch(`${env.SUPABASE_URL}/rest/v1/topics?id=eq.${topicId}`, {
-              method: 'PATCH',
-              headers: { 'apikey': env.SUPABASE_KEY, 'Authorization': `Bearer ${env.SUPABASE_KEY}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ used: true })
-            });
-          }
-          rawTopic = 'What mattered then has no value now. What had no value then matters now.';
-          category = 'E';
-          topicId = null;
-          script = await generateScript(env.OPENAI_API_KEY, rawTopic, 'E', []);
-        } else {
-          throw genError;
-        }
-      }
-
-      if (!script.setup) {
-        script.setup = `In 2025, ${rawTopic.toLowerCase()}.`;
-      }
-
-      const stored = await storeScript(
-        env.SUPABASE_URL, env.SUPABASE_KEY,
-        topicId, category, rawTopic, script, relatedScripts
-      );
-
-      return new Response(JSON.stringify({
-        success: true,
-        script_id: stored.id,
-        category,
-        raw_topic: rawTopic,
-        script,
-        memory_connections: relatedScripts.length
-      }), {
-        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-      });
-
-    } catch (error) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-      });
-    }
-  },
-
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(
-      fetch(`https://${env.WORKER_DOMAIN}/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${env.COUNCIL_SECRET}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({})
-      })
-    );
-  }
-};
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
