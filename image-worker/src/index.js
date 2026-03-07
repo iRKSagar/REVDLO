@@ -1,16 +1,14 @@
 // Mr. Oldverdict Image Worker
-// Takes scene direction from a Council script
-// Generates Mr. Oldverdict image using Leonardo AI
-// Stores image in Supabase storage
 
 const LEONARDO_API_URL = "https://cloud.leonardo.ai/api/rest/v1";
-
-// Leonardo Kino XL model - best for consistent character generation
 const LEONARDO_MODEL_ID = "7b592283-e8a7-4c5a-9ba6-d18c31f258b9";
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+};
 
-// Mr. Oldverdict base character prompt
-// This is locked and never changes. Scene direction is appended.
 const CHARACTER_BASE_PROMPT = `An ancient weathered man, broad and farmer built, approximately 90 kilograms, 
 olive to light tan skin tone ambiguous enough to belong to England rural America or outback Australia, 
 deep facial lines carved by centuries not decades, thick unkempt white hair, full white beard kept but never groomed, 
@@ -54,23 +52,17 @@ async function getScriptForImage(supabaseUrl, supabaseKey, scriptId) {
   const data = await response.json();
   if (data.length === 0) throw new Error('No scripts pending image generation');
 
-  // If fetched via scripts table directly
   if (scriptId) return data[0];
-
-  // If fetched via videos join
   return data[0].scripts;
 }
 
 function buildImagePrompt(script) {
   const propAddition = PROP_ADDITIONS[script.prop] || "";
   const expressionAddition = EXPRESSION_ADDITIONS[script.expression] || "";
-
-  // Clean scene direction for prompt
   const sceneDirection = script.scene
     .replace('Mr. Oldverdict', '')
     .replace('Mr Oldverdict', '')
     .trim();
-
   return `${CHARACTER_BASE_PROMPT}${propAddition}${expressionAddition}, ${sceneDirection}`;
 }
 
@@ -104,7 +96,6 @@ async function initiateImageGeneration(leonardoKey, prompt) {
 }
 
 async function pollForImage(leonardoKey, generationId, maxAttempts = 20) {
-  // Poll every 3 seconds for up to 60 seconds
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 3000));
 
@@ -134,14 +125,12 @@ async function pollForImage(leonardoKey, generationId, maxAttempts = 20) {
 }
 
 async function downloadAndUploadImage(supabaseUrl, supabaseKey, scriptId, leonardoImageUrl) {
-  // Download from Leonardo
   const imageResponse = await fetch(leonardoImageUrl);
   if (!imageResponse.ok) throw new Error('Failed to download image from Leonardo');
 
   const imageBuffer = await imageResponse.arrayBuffer();
   const fileName = `images/${scriptId}.jpg`;
 
-  // Upload to Supabase storage
   const uploadResponse = await fetch(
     `${supabaseUrl}/storage/v1/object/revdlo-media/${fileName}`,
     {
@@ -195,56 +184,44 @@ async function updateVideoWithImage(supabaseUrl, supabaseKey, scriptId, imageUrl
         'Authorization': `Bearer ${supabaseKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        script_id: scriptId,
-        image_url: imageUrl
-      })
+      body: JSON.stringify({ script_id: scriptId, image_url: imageUrl })
     });
   }
 }
 
 export default {
   async fetch(request, env) {
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: CORS_HEADERS });
+    }
+
     if (request.method === 'GET') {
       return new Response(JSON.stringify({ status: 'Image worker standing by.' }), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
       });
     }
 
     if (request.method !== 'POST') {
-      return new Response('Method not allowed', { status: 405 });
+      return new Response('Method not allowed', { status: 405, headers: CORS_HEADERS });
     }
 
     const authHeader = request.headers.get('Authorization');
     if (authHeader !== `Bearer ${env.COUNCIL_SECRET}`) {
-      return new Response('Unauthorized', { status: 401 });
+      return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS });
     }
 
     try {
       const body = await request.json();
       const scriptId = body.script_id || null;
 
-      // Fetch the script
       const script = await getScriptForImage(env.SUPABASE_URL, env.SUPABASE_KEY, scriptId);
-
-      // Build the full image prompt
       const imagePrompt = buildImagePrompt(script);
-
-      // Initiate generation on Leonardo
       const generationId = await initiateImageGeneration(env.LEONARDO_API_KEY, imagePrompt);
-
-      // Poll until image is ready
       const leonardoImageUrl = await pollForImage(env.LEONARDO_API_KEY, generationId);
-
-      // Download from Leonardo and upload to Supabase
       const supabaseImageUrl = await downloadAndUploadImage(
-        env.SUPABASE_URL,
-        env.SUPABASE_KEY,
-        script.id,
-        leonardoImageUrl
+        env.SUPABASE_URL, env.SUPABASE_KEY, script.id, leonardoImageUrl
       );
-
-      // Update video record with image URL
       await updateVideoWithImage(env.SUPABASE_URL, env.SUPABASE_KEY, script.id, supabaseImageUrl);
 
       return new Response(JSON.stringify({
@@ -253,21 +230,17 @@ export default {
         image_url: supabaseImageUrl,
         prompt_used: imagePrompt
       }), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
       });
 
     } catch (error) {
-      return new Response(JSON.stringify({
-        error: error.message
-      }), {
+      return new Response(JSON.stringify({ error: error.message }), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
       });
     }
   },
 
-  // Runs at 7:30 AM and 6:30 PM UTC
-  // After voice worker, before assembly
   async scheduled(event, env, ctx) {
     ctx.waitUntil(
       fetch(`https://${env.WORKER_DOMAIN}/`, {
