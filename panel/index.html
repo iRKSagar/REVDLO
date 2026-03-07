@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mr. Oldverdict — Pipeline Control</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: #0a0703;
+      font-family: Georgia, 'Times New Roman', serif;
+      color: #e8d5a0;
+      min-height: 100vh;
+    }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #080604; }
+    ::-webkit-scrollbar-thumb { background: #3a2508; border-radius: 3px; }
+    @keyframes pulse { 0%,100% { opacity:1; box-shadow: 0 0 8px #d4a017; } 50% { opacity:0.5; box-shadow: 0 0 3px #d4a017; } }
+    @keyframes fadein { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    button { transition: all 0.18s ease; }
+    button:hover:not(:disabled) { filter: brightness(1.15); transform: translateY(-1px); }
+    button:active:not(:disabled) { transform: translateY(0); }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+const BEARER = "mroldverdict_xK9mP1978";
+const COUNCIL = "https://revdlo1.rkinfoarch.workers.dev/";
+const VOICE   = "https://voice.rkinfoarch.workers.dev/";
+const IMAGE   = "https://image.rkinfoarch.workers.dev/";
+const RENDER  = "https://revdlo.onrender.com";
+
+const H = { "Authorization": `Bearer ${BEARER}`, "Content-Type": "application/json" };
+const CATS = ["A","B","C","D","E","F"];
+const CAT_LABELS = { A:"Modern Life", B:"Work & Hustle", C:"Relationships", D:"Time & Meaning", E:"Value Reversal", F:"Current Affairs" };
+
+// ── Tiny log hook ─────────────────────────────────────────────────────────────
+function useLog() {
+  const [logs, setLogs] = useState([]);
+  const add = (msg, type="info") => {
+    setLogs(p => [...p, { msg, type, ts: new Date().toLocaleTimeString(), id: Date.now()+Math.random() }]);
+  };
+  return { logs, add, clear: () => setLogs([]) };
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+async function wakeRender(add) {
+  add("Waking Render (free tier sleeps)…", "step");
+  try { await fetch(`${RENDER}/`, { headers: H }); add("Render is awake", "success"); }
+  catch(e) { add(`Render wake warning: ${e.message}`, "warn"); }
+}
+
+async function callCouncil(category, add) {
+  add(`Calling council (Category ${category}: ${CAT_LABELS[category]})…`, "step");
+  const r = await fetch(COUNCIL, { method:"POST", headers:H, body: JSON.stringify({ category }) });
+  const d = await r.json();
+  if (!d.script_id) throw new Error("Council failed: " + JSON.stringify(d));
+  add(`Script ID: ${d.script_id}`, "id");
+  add(`Topic: ${d.raw_topic || d.script?.raw_topic || "—"}`, "info");
+  return d.script_id;
+}
+
+async function callVoiceAndImage(sid, add) {
+  add("Generating voice + image in parallel…", "step");
+  const [vr, ir] = await Promise.all([
+    fetch(VOICE, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) }).then(r=>r.json()),
+    fetch(IMAGE, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) }).then(r=>r.json()),
+  ]);
+  if (vr.error) throw new Error("Voice: " + vr.error);
+  if (ir.error) throw new Error("Image: " + ir.error);
+  add("Voice generated ✓", "success");
+  add("Image generated ✓", "success");
+}
+
+async function callAssemble(sid, add) {
+  add("Assembling video (this takes ~2 min)…", "step");
+  const r = await fetch(`${RENDER}/assemble`, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error);
+  add(`Video ready: ${d.video_url}`, "success");
+  return d;
+}
+
+async function callPublish(sid, add) {
+  add("Publishing to YouTube…", "step");
+  const r = await fetch(`${RENDER}/publish`, { method:"POST", headers:H, body: JSON.stringify({ script_id: sid }) });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error);
+  add("Published to YouTube ✓", "success");
+  return d;
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+function StatusPill({ status }) {
+  const map = { idle:["#3a2508","#6a4a1a","●  Ready"], running:["#2a1e06","#d4a017","● Running…"], success:["#0d1f0d","#4caf50","● Success"], error:["#1f0d0d","#e53935","● Failed"] };
+  const [bg, fg, label] = map[status] || map.idle;
+  return (
+    <div style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"5px 14px",
+      background:bg, border:`1px solid ${fg}33`, borderRadius:20, fontSize:12, color:fg,
+      animation: status==="running" ? "pulse 1.4s infinite" : "none" }}>
+      {label}
+    </div>
+  );
+}
+
+function CatPicker({ value, onChange }) {
+  return (
+    <div>
+      <div style={{ fontSize:11, letterSpacing:"0.2em", color:"#4a3010", textTransform:"uppercase", marginBottom:8 }}>Category</div>
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+        {CATS.map(c => (
+          <button key={c} onClick={()=>onChange(c)} style={{
+            padding:"7px 14px", borderRadius:8, border:"none", cursor:"pointer",
+            fontFamily:"Georgia,serif", fontSize:12,
+            background: value===c ? "#8b5e1a" : "#1a1208",
+            color: value===c ? "#fff2d8" : "#6a4a1a",
+            fontWeight: value===c ? 700 : 400,
+            boxShadow: value===c ? "0 2px 8px rgba(180,110,20,0.3)" : "none"
+          }}>
+            {c} <span style={{ fontSize:10, opacity:0.7 }}>{CAT_LABELS[c]}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Modal({ show, title, icon, onClose, children }) {
+  if (!show) return null;
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", display:"flex",
+      alignItems:"center", justifyContent:"center", zIndex:200, padding:16 }}>
+      <div style={{ background:"#120d06", border:"1px solid #5a3a10", borderRadius:16,
+        padding:32, width:"100%", maxWidth:480,
+        boxShadow:"0 0 60px rgba(180,110,20,0.2)", animation:"fadein 0.2s ease" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:24 }}>
+          <span style={{ fontSize:22 }}>{icon}</span>
+          <span style={{ fontSize:20, fontWeight:700, color:"#d4a017" }}>{title}</span>
+          <button onClick={onClose} style={{ marginLeft:"auto", background:"none", border:"none",
+            color:"#4a3010", cursor:"pointer", fontSize:18, lineHeight:1 }}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function LogConsole({ logs, onClear }) {
+  const ref = useRef(null);
+  useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [logs]);
+
+  const colors = { step:"#64b5f6", success:"#81c784", error:"#e57373", warn:"#ffb74d", info:"#c9b99a", id:"#ffd54f" };
+  const icons  = { step:"›", success:"✓", error:"✗", warn:"!", info:" ", id:"#" };
+
+  return (
+    <div style={{ background:"#07050200", border:"1px solid #1e1508", borderRadius:12,
+      overflow:"hidden", maxWidth:680, margin:"0 auto" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+        padding:"10px 16px", borderBottom:"1px solid #1e1508", background:"#08060300" }}>
+        <span style={{ fontSize:10, letterSpacing:"0.25em", color:"#3a2508", textTransform:"uppercase" }}>Console Output</span>
+        <button onClick={onClear} style={{ background:"none", border:"none", color:"#2a1c08",
+          cursor:"pointer", fontSize:11, letterSpacing:"0.1em" }}>CLEAR</button>
+      </div>
+      <div ref={ref} style={{ minHeight:180, maxHeight:340, overflowY:"auto", padding:"14px 16px" }}>
+        {logs.length === 0
+          ? <div style={{ color:"#1e1508", fontFamily:"monospace", fontSize:12 }}>Awaiting command…</div>
+          : logs.map(l => (
+            <div key={l.id} style={{ display:"flex", gap:10, marginBottom:4,
+              fontFamily:"monospace", fontSize:12, animation:"fadein 0.15s ease" }}>
+              <span style={{ color:"#2a1c08", flexShrink:0, minWidth:70 }}>{l.ts}</span>
+              <span style={{ color: colors[l.type]||"#c9b99a", flexShrink:0 }}>{icons[l.type]||" "}</span>
+              <span style={{ color: colors[l.type]||"#c9b99a", wordBreak:"break-all" }}>{l.msg}</span>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── Main App ─────────────────────────────────────────────────────────────────
+function App() {
+  const { logs, add, clear } = useLog();
+  const [busy, setBusy]           = useState(false);
+  const [status, setStatus]       = useState("idle");
+
+  // Assemble modal
+  const [showAssemble, setShowAssemble] = useState(false);
+  const [assembleMode, setAssembleMode] = useState("new");
+  const [aCategory, setACategory]       = useState("A");
+  const [aScriptId, setAScriptId]       = useState("");
+
+  // Gen+Publish modal
+  const [showFull, setShowFull]   = useState(false);
+  const [fCategory, setFCategory] = useState("A");
+
+  // ── Assemble flow ───────────────────────────────────────────────────────
+  async function runAssemble() {
+    setShowAssemble(false);
+    setBusy(true); setStatus("running"); clear();
+    try {
+      let sid = aScriptId.trim();
+      if (assembleMode === "new") {
+        sid = await callCouncil(aCategory, add);
+        await callVoiceAndImage(sid, add);
+      } else {
+        if (!sid) throw new Error("Paste a script ID first");
+        add(`Using existing script: ${sid}`, "id");
+      }
+      await wakeRender(add);
+      await callAssemble(sid, add);
+      setStatus("success");
+      add("Done ✓", "success");
+    } catch(e) {
+      add(`Error: ${e.message}`, "error");
+      setStatus("error");
+    } finally { setBusy(false); }
+  }
+
+  // ── Full pipeline flow ──────────────────────────────────────────────────
+  async function runFull() {
+    setShowFull(false);
+    setBusy(true); setStatus("running"); clear();
+    try {
+      const sid = await callCouncil(fCategory, add);
+      await callVoiceAndImage(sid, add);
+      await wakeRender(add);
+      await callAssemble(sid, add);
+      await callPublish(sid, add);
+      setStatus("success");
+      add("Pipeline complete ✓", "success");
+    } catch(e) {
+      add(`Error: ${e.message}`, "error");
+      setStatus("error");
+    } finally { setBusy(false); }
+  }
+
+  const cardStyle = {
+    background:"#0e0b06", border:"1px solid #2a1c08",
+    borderRadius:16, padding:28, textAlign:"center",
+    boxShadow:"0 4px 32px rgba(0,0,0,0.5)",
+    flex:"1 1 200px", maxWidth:240
+  };
+
+  const primaryBtn = (disabled) => ({
+    padding:"11px 24px", borderRadius:10, border:"none",
+    fontFamily:"Georgia,serif", fontSize:14, fontWeight:700,
+    background: disabled ? "#2a1c08" : "linear-gradient(135deg, #8b5e1a, #c4861e)",
+    color: disabled ? "#3a2810" : "#fff2d8",
+    cursor: disabled ? "not-allowed" : "pointer",
+    boxShadow: disabled ? "none" : "0 2px 16px rgba(180,110,20,0.35)",
+    width:"100%"
+  });
+
+  const dangerBtn = (disabled) => ({
+    padding:"11px 24px", borderRadius:10, border:"none",
+    fontFamily:"Georgia,serif", fontSize:14, fontWeight:700,
+    background: disabled ? "#2a1c08" : "linear-gradient(135deg, #7b1a1a, #b52020)",
+    color: disabled ? "#3a2810" : "#ffd8d8",
+    cursor: disabled ? "not-allowed" : "pointer",
+    boxShadow: disabled ? "none" : "0 2px 16px rgba(180,30,30,0.3)",
+    width:"100%"
+  });
+
+  const toggleBtn = (active) => ({
+    flex:1, padding:"9px 0", borderRadius:8, border:"none",
+    fontFamily:"Georgia,serif", fontSize:13, cursor:"pointer",
+    background: active ? "#8b5e1a" : "#1a1208",
+    color: active ? "#fff2d8" : "#4a3010",
+    fontWeight: active ? 700 : 400
+  });
+
+  return (
+    <div style={{ minHeight:"100vh", padding:"40px 20px",
+      background:"radial-gradient(ellipse at 15% 15%, rgba(100,60,10,0.12) 0%, transparent 55%), radial-gradient(ellipse at 85% 85%, rgba(80,40,5,0.08) 0%, transparent 55%), #0a0703" }}>
+
+      {/* Header */}
+      <div style={{ textAlign:"center", marginBottom:44 }}>
+        <div style={{ fontSize:10, letterSpacing:"0.35em", color:"#3a2508", textTransform:"uppercase", marginBottom:6 }}>
+          Automated Pipeline
+        </div>
+        <div style={{ fontSize:36, fontWeight:700, color:"#d4a017", letterSpacing:"0.04em", textShadow:"0 2px 20px rgba(212,160,23,0.2)" }}>
+          Mr. Oldverdict
+        </div>
+        <div style={{ fontSize:13, color:"#4a3010", marginTop:5, letterSpacing:"0.08em" }}>
+          Been watching since before.
+        </div>
+        <div style={{ marginTop:16 }}>
+          <StatusPill status={status} />
+        </div>
+      </div>
+
+      {/* Action Cards */}
+      <div style={{ display:"flex", gap:20, justifyContent:"center", marginBottom:36, flexWrap:"wrap", maxWidth:600, margin:"0 auto 36px" }}>
+        <div style={cardStyle}>
+          <div style={{ fontSize:32, marginBottom:14 }}>🎬</div>
+          <div style={{ fontSize:17, fontWeight:700, color:"#d4a017", marginBottom:8 }}>Assemble</div>
+          <div style={{ fontSize:12, color:"#4a3010", marginBottom:22, lineHeight:1.6 }}>
+            New script or existing ID.<br/>Build video, skip publish.
+          </div>
+          <button disabled={busy} onClick={() => setShowAssemble(true)} style={primaryBtn(busy)}>
+            {busy ? "Running…" : "Assemble Video"}
+          </button>
+        </div>
+
+        <div style={cardStyle}>
+          <div style={{ fontSize:32, marginBottom:14 }}>🚀</div>
+          <div style={{ fontSize:17, fontWeight:700, color:"#d4a017", marginBottom:8 }}>Full Pipeline</div>
+          <div style={{ fontSize:12, color:"#4a3010", marginBottom:22, lineHeight:1.6 }}>
+            Script → Voice → Image<br/>→ Video → YouTube.
+          </div>
+          <button disabled={busy} onClick={() => setShowFull(true)} style={dangerBtn(busy)}>
+            {busy ? "Running…" : "Generate & Publish"}
+          </button>
+        </div>
+      </div>
+
+      {/* Console */}
+      <LogConsole logs={logs} onClear={clear} />
+
+      {/* ── Assemble Modal ── */}
+      <Modal show={showAssemble} title="Assemble Video" icon="🎬" onClose={() => setShowAssemble(false)}>
+        <div style={{ display:"flex", gap:8, marginBottom:20 }}>
+          <button style={toggleBtn(assembleMode==="new")} onClick={() => setAssembleMode("new")}>New Script</button>
+          <button style={toggleBtn(assembleMode==="old")} onClick={() => setAssembleMode("old")}>Existing ID</button>
+        </div>
+
+        {assembleMode === "new" && (
+          <div style={{ marginBottom:20 }}>
+            <CatPicker value={aCategory} onChange={setACategory} />
+          </div>
+        )}
+
+        {assembleMode === "old" && (
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontSize:11, letterSpacing:"0.2em", color:"#4a3010", textTransform:"uppercase", marginBottom:8 }}>Script ID</div>
+            <input
+              value={aScriptId}
+              onChange={e => setAScriptId(e.target.value)}
+              placeholder="paste UUID here…"
+              style={{ width:"100%", padding:"10px 14px", background:"#0a0703",
+                border:"1px solid #3a2508", borderRadius:8, color:"#e8d5a0",
+                fontFamily:"monospace", fontSize:13, outline:"none" }}
+            />
+            <div style={{ fontSize:11, color:"#3a2508", marginTop:6 }}>
+              Voice + image must already be generated for this ID.
+            </div>
+          </div>
+        )}
+
+        <button onClick={runAssemble} style={primaryBtn(false)}>
+          {assembleMode === "new" ? "Generate + Assemble" : "Assemble This ID"}
+        </button>
+      </Modal>
+
+      {/* ── Full Pipeline Modal ── */}
+      <Modal show={showFull} title="Generate & Publish" icon="🚀" onClose={() => setShowFull(false)}>
+        <div style={{ marginBottom:20 }}>
+          <CatPicker value={fCategory} onChange={setFCategory} />
+        </div>
+        <div style={{ fontSize:12, color:"#4a3010", marginBottom:20, lineHeight:1.7,
+          padding:"12px 14px", background:"#0a0703", borderRadius:8, border:"1px solid #1e1508" }}>
+          Council → Voice + Image → Assembly → YouTube publish.<br/>
+          Takes 3–5 minutes. Keep this tab open.
+        </div>
+        <button onClick={runFull} style={dangerBtn(false)}>
+          Run Full Pipeline
+        </button>
+      </Modal>
+
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
