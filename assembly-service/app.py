@@ -33,6 +33,7 @@ def add_cors(response):
 @app.route('/publish', methods=['OPTIONS'])
 @app.route('/publish-instagram', methods=['OPTIONS'])
 @app.route('/run-pipeline', methods=['OPTIONS'])
+@app.route('/video-status', methods=['OPTIONS'])
 def options_handler():
     return '', 204
 
