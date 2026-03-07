@@ -1,9 +1,12 @@
 // Mr. Oldverdict Voice Worker
-// Takes a script from Supabase
-// Sends lines to ElevenLabs
-// Stores audio file in Supabase storage
 
 const ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1";
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+};
 
 async function getScript(supabaseUrl, supabaseKey, scriptId) {
   const url = scriptId
@@ -128,14 +131,8 @@ async function updateVideoRecord(supabaseUrl, supabaseKey, scriptId, audioUrl) {
 }
 
 function buildFullScript(lines, setup) {
-  // Voice speaks: setup text first, then line 1, then line 2.
-  // Setup text appears as first caption on the leather panel in sync.
   const parts = [];
-
-  if (setup) {
-    parts.push(setup.trim() + '...');
-  }
-
+  if (setup) parts.push(setup.trim() + '...');
   lines.forEach((line, index) => {
     let text = line.text;
     if (index < lines.length - 1) {
@@ -143,25 +140,29 @@ function buildFullScript(lines, setup) {
     }
     parts.push(text);
   });
-
   return parts.join('  ').trim() + '...';
 }
 
 export default {
   async fetch(request, env) {
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: CORS_HEADERS });
+    }
+
     if (request.method === 'GET') {
       return new Response(JSON.stringify({ status: 'Voice worker standing by.' }), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
       });
     }
 
     if (request.method !== 'POST') {
-      return new Response('Method not allowed', { status: 405 });
+      return new Response('Method not allowed', { status: 405, headers: CORS_HEADERS });
     }
 
     const authHeader = request.headers.get('Authorization');
     if (authHeader !== `Bearer ${env.COUNCIL_SECRET}`) {
-      return new Response('Unauthorized', { status: 401 });
+      return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS });
     }
 
     try {
@@ -169,23 +170,9 @@ export default {
       const scriptId = body.script_id || null;
 
       const script = await getScript(env.SUPABASE_URL, env.SUPABASE_KEY, scriptId);
-
-      // Voice speaks line 1 and line 2 only — setup is on screen as card
       const fullText = buildFullScript(script.lines, script.setup);
-
-      const audioBuffer = await generateAudio(
-        env.ELEVENLABS_API_KEY,
-        env.ELEVENLABS_VOICE_ID,
-        fullText
-      );
-
-      const audioUrl = await uploadAudioToSupabase(
-        env.SUPABASE_URL,
-        env.SUPABASE_KEY,
-        script.id,
-        audioBuffer
-      );
-
+      const audioBuffer = await generateAudio(env.ELEVENLABS_API_KEY, env.ELEVENLABS_VOICE_ID, fullText);
+      const audioUrl = await uploadAudioToSupabase(env.SUPABASE_URL, env.SUPABASE_KEY, script.id, audioBuffer);
       await updateVideoRecord(env.SUPABASE_URL, env.SUPABASE_KEY, script.id, audioUrl);
 
       return new Response(JSON.stringify({
@@ -194,15 +181,13 @@ export default {
         audio_url: audioUrl,
         text_spoken: fullText
       }), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
       });
 
     } catch (error) {
-      return new Response(JSON.stringify({
-        error: error.message
-      }), {
+      return new Response(JSON.stringify({ error: error.message }), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
       });
     }
   },
