@@ -64,31 +64,49 @@ def check_auth(req):
 # ─── Leather panel renderer (uses real leather texture image) ─────────────────
 
 def render_leather_panel(video_width, panel_h, leather_path):
-    """Load real leather texture, darken center for text readability,
-    keep ornate border/corners fully visible. Returns numpy RGBA array."""
+    """Leather border with glass center — character image shows through the middle.
+    Returns RGBA numpy array so MoviePy composites it over the character image."""
     try:
         print(f'[leather panel] loading from {leather_path}')
         src = PIL.Image.open(leather_path).convert('RGBA')
         panel_img = src.resize((video_width, panel_h), PIL.Image.LANCZOS)
         print(f'[leather panel] source size: {src.size}, resized to: {panel_img.size}')
 
-        overlay = PIL.Image.new('RGBA', (video_width, panel_h), (0, 0, 0, 0))
-        od = ImageDraw.Draw(overlay)
+        border_w = 48
 
-        border_w = 44
+        # Make a mask: border = fully opaque (show leather), center = mostly transparent (glass)
+        # Start with the leather image at full opacity
+        r, g, b, a = panel_img.split()
+
+        # Build an alpha mask: full outside border, low inside center
+        mask = PIL.Image.new('L', (video_width, panel_h), 255)  # all opaque
+        mask_draw = ImageDraw.Draw(mask)
+
         cx0, cy0 = border_w, border_w
         cx1, cy1 = video_width - border_w, panel_h - border_w
 
-        # Solid dark center for text readability
-        od.rectangle([cx0, cy0, cx1, cy1], fill=(0, 0, 0, 190))
+        # Center = 40 alpha (mostly transparent — glass effect)
+        mask_draw.rectangle([cx0, cy0, cx1, cy1], fill=40)
 
-        # Feathered gradient from center edge to border — soft blend
+        # Feather the edge — gradient from 40 to 255 over 20px
         for i in range(20):
-            a = int(190 * (1 - i / 20) ** 0.5)
-            od.rectangle([cx0 - i, cy0 - i, cx1 + i, cy1 + i], outline=(0, 0, 0, a))
+            alpha_val = int(40 + (255 - 40) * (i / 20) ** 0.6)
+            mask_draw.rectangle(
+                [cx0 - i, cy0 - i, cx1 + i, cy1 + i],
+                outline=alpha_val
+            )
 
-        panel_final = PIL.Image.alpha_composite(panel_img, overlay)
-        return np.array(panel_final.convert('RGB'))
+        # Apply mask to leather alpha channel
+        panel_img.putalpha(mask)
+
+        # Add a very subtle dark tint over center only (improves text contrast slightly)
+        tint = PIL.Image.new('RGBA', (video_width, panel_h), (0, 0, 0, 0))
+        tint_draw = ImageDraw.Draw(tint)
+        tint_draw.rectangle([cx0, cy0, cx1, cy1], fill=(0, 0, 0, 80))
+        panel_final = PIL.Image.alpha_composite(panel_img, tint)
+
+        print(f'[leather panel] glass render complete')
+        return np.array(panel_final)   # RGBA
     except Exception as e:
         print(f'[leather panel] render failed: {e}')
         return None
@@ -478,7 +496,8 @@ def build_caption_panel(video_width, video_height, duration, leather_path=None):
     if leather_path and os.path.exists(leather_path):
         arr = render_leather_panel(video_width, panel_h, leather_path)
         if arr is not None:
-            panel_clip = (ImageClip(arr)
+            # RGBA array — ismask=False, MoviePy uses alpha channel for compositing
+            panel_clip = (ImageClip(arr, ismask=False)
                           .set_position((0, panel_y))
                           .set_duration(duration))
             return [panel_clip]
@@ -492,16 +511,15 @@ def build_caption_panel(video_width, video_height, duration, leather_path=None):
 
 
 def render_caption_image(text, video_width, panel_h):
-    """Render caption text to a PIL RGBA image using PIL — no ImageMagick, no clipping.
-    Returns numpy RGBA array sized (panel_h, video_width, 4)."""
+    """Render caption text to RGBA image — large font, dark pill behind each line,
+    heavy stroke. Designed to be readable on any background."""
     from PIL import ImageFont, ImageDraw
     import textwrap
 
-    font_size = 32
-    padding_x = 48   # horizontal margin inside panel
+    font_size = 38          # up from 32
+    padding_x = 40
     max_w = video_width - padding_x * 2
 
-    # Try to load a clean system font, fall back to default
     font = None
     for font_path in [
         '/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf',
@@ -518,37 +536,55 @@ def render_caption_image(text, video_width, panel_h):
     if font is None:
         font = ImageFont.load_default()
 
-    # Wrap text to fit panel width
-    avg_char_w = font_size * 0.55
+    # Wrap to fit width
+    avg_char_w = font_size * 0.52
     wrap_width = max(1, int(max_w / avg_char_w))
     wrapped_lines = textwrap.wrap(text, width=wrap_width)
     if not wrapped_lines:
         wrapped_lines = [text]
 
-    # Measure total text height
-    line_h = font_size + 8
+    line_h = font_size + 14   # generous line spacing
     total_text_h = len(wrapped_lines) * line_h
 
-    # Create RGBA canvas — fully transparent
     img = PIL.Image.new('RGBA', (video_width, panel_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Draw each line centered, with black stroke then white fill
     y_start = (panel_h - total_text_h) // 2
+
     for j, line in enumerate(wrapped_lines):
         bbox = draw.textbbox((0, 0), line, font=font)
         line_w = bbox[2] - bbox[0]
+        line_actual_h = bbox[3] - bbox[1]
         x = (video_width - line_w) // 2
         y = y_start + j * line_h
 
-        # Stroke (draw at offsets)
-        stroke = 2
+        # Dark semi-transparent pill behind this line
+        pill_pad_x = 18
+        pill_pad_y = 8
+        pill_x0 = x - pill_pad_x
+        pill_y0 = y - pill_pad_y
+        pill_x1 = x + line_w + pill_pad_x
+        pill_y1 = y + line_actual_h + pill_pad_y
+        radius = 10
+        pill_layer = PIL.Image.new('RGBA', (video_width, panel_h), (0, 0, 0, 0))
+        pill_draw = ImageDraw.Draw(pill_layer)
+        pill_draw.rounded_rectangle(
+            [pill_x0, pill_y0, pill_x1, pill_y1],
+            radius=radius,
+            fill=(0, 0, 0, 210)   # 82% opaque black pill
+        )
+        img = PIL.Image.alpha_composite(img, pill_layer)
+        draw = ImageDraw.Draw(img)
+
+        # Stroke — 3px, drawn at all offsets
+        stroke = 3
         for dx in range(-stroke, stroke + 1):
             for dy in range(-stroke, stroke + 1):
                 if dx != 0 or dy != 0:
                     draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0, 255))
-        # Fill
-        draw.text((x, y), line, font=font, fill=(255, 255, 255, 255))
+
+        # White fill
+        draw.text((x, y), line, font=font, fill=(255, 245, 200, 255))  # warm cream
 
     return np.array(img)
 
@@ -993,6 +1029,27 @@ def run_pipeline():
     }), 202
 
 
+
+@app.route('/video-status', methods=['GET'])
+def video_status():
+    if not check_auth(request):
+        return jsonify({'error': 'Unauthorized'}), 401
+    script_id = request.args.get('script_id')
+    if not script_id:
+        return jsonify({'error': 'script_id required'}), 400
+    try:
+        res = requests.get(
+            f"{SUPABASE_URL}/rest/v1/videos?script_id=eq.{script_id}&select=video_url,voice_file_url,image_url",
+            headers={'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
+        )
+        rows = res.json()
+        if rows and rows[0].get('video_url'):
+            return jsonify({'ready': True, 'video_url': rows[0]['video_url']})
+        return jsonify({'ready': False})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/publish', methods=['POST'])
 def publish():
     if not check_auth(request):
@@ -1082,6 +1139,7 @@ def assemble_job(script_id):
         print(f"[assemble_job] Done: {video_url}")
 
         publish_to_youtube_job(script_id)
+        publish_to_instagram_job(script_id)
 
     except Exception as e:
         import traceback
