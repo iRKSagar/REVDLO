@@ -123,16 +123,24 @@ def render_leather_panel(video_width, panel_h, leather_path):
 # ─── YouTube helpers ───────────────────────────────────────────────────────────
 
 def get_youtube_access_token():
-     # DEBUG — check what Render actually loaded
+    def get_youtube_access_token():
+    # DEBUG
     print("YT_CLIENT_ID:", YT_CLIENT_ID[:20] if YT_CLIENT_ID else None)
     print("YT_SECRET_PRESENT:", bool(YT_CLIENT_SECRET))
     print("YT_REFRESH:", YT_REFRESH_TOKEN[:10] if YT_REFRESH_TOKEN else None)
-    res = requests.post('https://oauth2.googleapis.com/token', data={
-        'client_id': YT_CLIENT_ID,
-        'client_secret': YT_CLIENT_SECRET,
-        'refresh_token': YT_REFRESH_TOKEN,
-        'grant_type': 'refresh_token'
-    })
+
+    res = requests.post(
+        'https://oauth2.googleapis.com/token',
+        data={
+            'client_id': YT_CLIENT_ID.strip() if YT_CLIENT_ID else None,
+            'client_secret': YT_CLIENT_SECRET.strip() if YT_CLIENT_SECRET else None,
+            'refresh_token': YT_REFRESH_TOKEN.strip() if YT_REFRESH_TOKEN else None,
+            'grant_type': 'refresh_token'
+        }
+    )
+
+    print("YT TOKEN RESPONSE:", res.text)
+
     res.raise_for_status()
     return res.json()['access_token']
 
