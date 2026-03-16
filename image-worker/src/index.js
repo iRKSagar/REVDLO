@@ -1,4 +1,4 @@
-// Mr. Oldverdict Image Worker
+// Mr. Oldverdict Image Worker (Scene-Based with Style Variation)
 
 const LEONARDO_API_URL = "https://cloud.leonardo.ai/api/rest/v1";
 const LEONARDO_MODEL_ID = "7b592283-e8a7-4c5a-9ba6-d18c31f258b9";
@@ -9,34 +9,43 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Authorization, Content-Type',
 };
 
-const CHARACTER_BASE_PROMPT = `An ancient weathered man, broad and farmer built, approximately 90 kilograms, 
-olive to light tan skin tone ambiguous enough to belong to England rural America or outback Australia, 
-deep facial lines carved by centuries not decades, thick unkempt white hair, full white beard kept but never groomed, 
-steel grey pale blue eyes that have already decided about everything, 
-wearing a dark earth toned heavy worn jacket with no logos no patterns, 
-simple clothing that predates fast fashion by a century, 
-posture settled and still as someone who has nowhere else to be, 
-expression flat and present not sad not happy just watching, 
-photorealistic semi stylized illustration, sharp focus on face and upper body, 
-cinematic lighting, highly detailed, 9:16 vertical format`;
+const STYLE_HINTS = [
+  "cinematic lighting",
+  "dramatic contrast",
+  "minimalist composition",
+  "documentary photography style",
+  "symbolic illustration",
+  "moody atmosphere",
+  "high contrast lighting",
+  "editorial photography",
+  "conceptual visual metaphor",
+  "dramatic shadows"
+];
 
-const PROP_ADDITIONS = {
-  cigar: ", a thick slowly burning cigar held loosely between two fingers at the corner of his mouth",
-  watch: ", a worn gold chained pocket watch visible in his breast pocket or held open in one hand",
-  both: ", a thick slowly burning cigar held loosely between two fingers, a worn gold chained pocket watch visible in his breast pocket",
-  none: ""
-};
+const NEGATIVE_PROMPT = `
+old man,
+elderly narrator,
+wise man,
+talking character,
+portrait,
+close up face,
+text,
+logo,
+watermark,
+cartoon,
+anime,
+childish,
+low quality,
+blurry,
+deformed
+`;
 
-const EXPRESSION_ADDITIONS = {
-  flat_observation: ", default flat expression watching something one eyebrow at rest",
-  slight_raise: ", one eyebrow fractionally higher subtle disbelief",
-  mid_line_delivery: ", mouth barely open eyes directly ahead mid sentence",
-  quiet_concern: ", eyes slightly softer looking directly at a person not a thing",
-  precise_destruction: ", eyes slightly narrowed not angry just arrived at a conclusion",
-  faint_amusement: ", corners of mouth moved approximately two millimeters this is his laugh"
-};
+function randomStyle() {
+  return STYLE_HINTS[Math.floor(Math.random() * STYLE_HINTS.length)];
+}
 
 async function getScriptForImage(supabaseUrl, supabaseKey, scriptId) {
+
   const url = scriptId
     ? `${supabaseUrl}/rest/v1/scripts?id=eq.${scriptId}&limit=1`
     : `${supabaseUrl}/rest/v1/videos?image_url=is.null&order=created_at.asc&limit=1&select=script_id,scripts(*)`;
@@ -49,6 +58,7 @@ async function getScriptForImage(supabaseUrl, supabaseKey, scriptId) {
   });
 
   if (!response.ok) throw new Error('Failed to fetch from Supabase');
+
   const data = await response.json();
   if (data.length === 0) throw new Error('No scripts pending image generation');
 
@@ -57,58 +67,38 @@ async function getScriptForImage(supabaseUrl, supabaseKey, scriptId) {
 }
 
 function buildImagePrompt(script) {
-  const propAddition = PROP_ADDITIONS[script.prop] || "";
-  const expressionAddition = EXPRESSION_ADDITIONS[script.expression] || "";
-  const sceneDirection = script.scene
-    .replace('Mr. Oldverdict', '')
-    .replace('Mr Oldverdict', '')
+
+  let scene = script.scene || "";
+
+  scene = scene
+    .replace("Mr. Oldverdict", "")
+    .replace("Mr Oldverdict", "")
     .trim();
-  return `${CHARACTER_BASE_PROMPT}${propAddition}${expressionAddition}, ${sceneDirection}`;
+
+  const style = randomStyle();
+
+  return `
+Scene:
+${scene}
+
+Create a strong visual metaphor representing this situation.
+
+${style}
+
+high quality image,
+detailed environment,
+clear storytelling,
+vertical composition,
+9:16 frame
+`;
 }
 
-async function uploadReferenceImage(leonardoKey, imageUrl) {
-  // Step 1: Download reference image from Supabase
-  const imgRes = await fetch(imageUrl);
-  if (!imgRes.ok) throw new Error('Failed to fetch reference image');
-  const imgBuffer = await imgRes.arrayBuffer();
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(imgBuffer)));
+async function initiateImageGeneration(leonardoKey, prompt) {
 
-  // Step 2: Upload to Leonardo to get internal init_image_id
-  const uploadRes = await fetch(`${LEONARDO_API_URL}/init-image`, {
-    method: 'POST',
-    headers: {
-      'authorization': `Bearer ${leonardoKey}`,
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({
-      extension: 'jpg'
-    })
-  });
-
-  if (!uploadRes.ok) {
-    const err = await uploadRes.text();
-    throw new Error(`Leonardo init-image upload failed: ${err}`);
-  }
-
-  const uploadData = await uploadRes.json();
-  const { url: s3Url, fields, id: initImageId } = uploadData.uploadInitImage;
-
-  // Step 3: PUT the image to the S3 presigned URL
-  const formData = new FormData();
-  Object.entries(fields).forEach(([k, v]) => formData.append(k, v));
-  formData.append('file', new Blob([imgBuffer], { type: 'image/jpeg' }));
-
-  const s3Res = await fetch(s3Url, { method: 'POST', body: formData });
-  if (!s3Res.ok) throw new Error('S3 upload failed for reference image');
-
-  return initImageId;
-}
-
-async function initiateImageGeneration(leonardoKey, prompt, initImageId) {
   const body = {
     modelId: LEONARDO_MODEL_ID,
     prompt: prompt,
-    negative_prompt: "cartoon, anime, childish, ugly, deformed, blurry, low quality, modern clothing, logos, branded, smiling broadly, angry, surprised, young, female, different person, different face",
+    negative_prompt: NEGATIVE_PROMPT,
     num_images: 1,
     width: 576,
     height: 1024,
@@ -116,12 +106,6 @@ async function initiateImageGeneration(leonardoKey, prompt, initImageId) {
     num_inference_steps: 30,
     public: false
   };
-
-  // Use reference image for character consistency if available
-  if (initImageId) {
-    body.init_image_id = initImageId;
-    body.init_strength = 0.25;  // 0.25 = strong character match, still allows scene variation
-  }
 
   const response = await fetch(`${LEONARDO_API_URL}/generations`, {
     method: 'POST',
@@ -142,7 +126,9 @@ async function initiateImageGeneration(leonardoKey, prompt, initImageId) {
 }
 
 async function pollForImage(leonardoKey, generationId, maxAttempts = 20) {
+
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+
     await new Promise(resolve => setTimeout(resolve, 3000));
 
     const response = await fetch(`${LEONARDO_API_URL}/generations/${generationId}`, {
@@ -167,12 +153,13 @@ async function pollForImage(leonardoKey, generationId, maxAttempts = 20) {
     }
   }
 
-  throw new Error('Image generation timed out after 60 seconds');
+  throw new Error('Image generation timed out');
 }
 
 async function downloadAndUploadImage(supabaseUrl, supabaseKey, scriptId, leonardoImageUrl) {
+
   const imageResponse = await fetch(leonardoImageUrl);
-  if (!imageResponse.ok) throw new Error('Failed to download image from Leonardo');
+  if (!imageResponse.ok) throw new Error('Failed to download image');
 
   const imageBuffer = await imageResponse.arrayBuffer();
   const fileName = `images/${scriptId}.jpg`;
@@ -200,6 +187,7 @@ async function downloadAndUploadImage(supabaseUrl, supabaseKey, scriptId, leonar
 }
 
 async function updateVideoWithImage(supabaseUrl, supabaseKey, scriptId, imageUrl) {
+
   const checkResponse = await fetch(
     `${supabaseUrl}/rest/v1/videos?script_id=eq.${scriptId}&limit=1`,
     {
@@ -213,6 +201,7 @@ async function updateVideoWithImage(supabaseUrl, supabaseKey, scriptId, imageUrl
   const existing = await checkResponse.json();
 
   if (existing.length > 0) {
+
     await fetch(`${supabaseUrl}/rest/v1/videos?script_id=eq.${scriptId}`, {
       method: 'PATCH',
       headers: {
@@ -222,7 +211,9 @@ async function updateVideoWithImage(supabaseUrl, supabaseKey, scriptId, imageUrl
       },
       body: JSON.stringify({ image_url: imageUrl })
     });
+
   } else {
+
     await fetch(`${supabaseUrl}/rest/v1/videos`, {
       method: 'POST',
       headers: {
@@ -232,6 +223,7 @@ async function updateVideoWithImage(supabaseUrl, supabaseKey, scriptId, imageUrl
       },
       body: JSON.stringify({ script_id: scriptId, image_url: imageUrl })
     });
+
   }
 }
 
@@ -243,7 +235,7 @@ export default {
     }
 
     if (request.method === 'GET') {
-      return new Response(JSON.stringify({ status: 'Image worker standing by.' }), {
+      return new Response(JSON.stringify({ status: 'Scene image worker ready.' }), {
         headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
       });
     }
@@ -258,30 +250,31 @@ export default {
     }
 
     try {
+
       const body = await request.json();
       const scriptId = body.script_id || null;
 
       const script = await getScriptForImage(env.SUPABASE_URL, env.SUPABASE_KEY, scriptId);
+
       const imagePrompt = buildImagePrompt(script);
 
-      // Upload reference image to Leonardo for character consistency
-      // REFERENCE_IMAGE_URL set in Cloudflare worker env vars
-      let initImageId = null;
-      if (env.REFERENCE_IMAGE_URL) {
-        try {
-          initImageId = await uploadReferenceImage(env.LEONARDO_API_KEY, env.REFERENCE_IMAGE_URL);
-          console.log('Reference image uploaded, initImageId:', initImageId);
-        } catch (refErr) {
-          console.log('Reference image upload failed (continuing without):', refErr.message);
-        }
-      }
+      const generationId = await initiateImageGeneration(env.LEONARDO_API_KEY, imagePrompt);
 
-      const generationId = await initiateImageGeneration(env.LEONARDO_API_KEY, imagePrompt, initImageId);
       const leonardoImageUrl = await pollForImage(env.LEONARDO_API_KEY, generationId);
+
       const supabaseImageUrl = await downloadAndUploadImage(
-        env.SUPABASE_URL, env.SUPABASE_KEY, script.id, leonardoImageUrl
+        env.SUPABASE_URL,
+        env.SUPABASE_KEY,
+        script.id,
+        leonardoImageUrl
       );
-      await updateVideoWithImage(env.SUPABASE_URL, env.SUPABASE_KEY, script.id, supabaseImageUrl);
+
+      await updateVideoWithImage(
+        env.SUPABASE_URL,
+        env.SUPABASE_KEY,
+        script.id,
+        supabaseImageUrl
+      );
 
       return new Response(JSON.stringify({
         success: true,
@@ -293,14 +286,17 @@ export default {
       });
 
     } catch (error) {
+
       return new Response(JSON.stringify({ error: error.message }), {
         status: 500,
         headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
       });
+
     }
   },
 
   async scheduled(event, env, ctx) {
+
     ctx.waitUntil(
       fetch(`https://${env.WORKER_DOMAIN}/`, {
         method: 'POST',
@@ -311,5 +307,6 @@ export default {
         body: JSON.stringify({})
       })
     );
+
   }
 };
