@@ -467,7 +467,8 @@ def get_video_record(script_id):
 
 def get_script(script_id):
     response = requests.get(
-        f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id}&limit=1&select=id,setup,lines,scene,prop,expression,theme_tags',
+        f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id}&limit=1&select=id,setup,lines,scene,prop,expression,theme_tags,select=id,setup,lines,scene,prop,expression,theme_tags,
+        particle_effect,camera_motion,color_grade',
         headers={'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
     )
     response.raise_for_status()
@@ -475,6 +476,10 @@ def get_script(script_id):
     if not data:
         raise Exception('Script not found')
     row = data[0]
+    # Safe defaults for new visual columns
+    row["particle_effect"] = row.get("particle_effect") or "none"
+    row["camera_motion"] = row.get("camera_motion") or "slow_zoom"
+    row["color_grade"] = row.get("color_grade") or "neutral"
     print(f"Raw script row: {row}")
     return row
 
@@ -500,7 +505,7 @@ def build_setup_card(setup_text, video_width, video_height, image_path=None,
             new_h = int(img_h * scale)
             pil_bg = pil_bg.resize((new_w, new_h), PIL.Image.LANCZOS)
             x0 = (new_w - video_width) // 2
-            y0 = int(new_h * 0.38) - video_height // 2
+            y0 = (new_h - video_height) // 2
             y0 = max(0, min(y0, new_h - video_height))
             x0 = max(0, min(x0, new_w - video_width))
             pil_bg = pil_bg.crop((x0, y0, x0 + video_width, y0 + video_height))
