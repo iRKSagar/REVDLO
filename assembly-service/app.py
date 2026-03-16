@@ -467,8 +467,7 @@ def get_video_record(script_id):
 
 def get_script(script_id):
     response = requests.get(
-        f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id}&limit=1&select=id,setup,lines,scene,prop,expression,theme_tags,select=id,setup,lines,scene,prop,expression,theme_tags,
-        particle_effect,camera_motion,color_grade',
+    f'{SUPABASE_URL}/rest/v1/scripts?id=eq.{script_id}&limit=1&select=id,setup,lines,scene,prop,expression,theme_tags,particle_effect,camera_motion,color_grade',
         headers={'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
     )
     response.raise_for_status()
