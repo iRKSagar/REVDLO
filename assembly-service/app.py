@@ -833,7 +833,7 @@ def assemble_video(image_path, audio_path, lines, output_path, setup_text=None,
     # difference at short durations). ~480 frames at 24fps, ~2ms each on Render.
     def make_frame(t):
         progress = min(t / total_duration, 1.0)
-        zoom = 1.0 + 0.08 * progress          # 1.00 → 1.08
+        zoom = 1.0 + 0.04 * progress          # 1.00 → 1.08
         scale = base_scale * zoom
         new_w = int(img_w * scale)
         new_h = int(img_h * scale)
