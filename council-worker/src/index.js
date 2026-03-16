@@ -243,6 +243,11 @@ async function storeScript(supabaseUrl, supabaseKey, topicId, category, rawTopic
       expression: script.expression,
       theme_tags: script.theme_tags,
       pinned_comment: script.pinned_comment || null
+
+       // ── NEW VISUAL DIRECTIVES (SAFE DEFAULTS) ──
+      particle_effect: "none",
+      camera_motion: "slow_zoom",
+      color_grade: "neutral"
     })
   });
 
