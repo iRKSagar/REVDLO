@@ -79,6 +79,48 @@ async function getScriptForImage(supabaseUrl, supabaseKey, scriptId) {
   const data = await response.json();
   if (data.length === 0) throw new Error('No scripts pending image generation');
 
+function visualDirector(scene) {
+
+  const environments = [
+    "quiet minimalist studio",
+    "calm modern interior",
+    "softly lit workspace",
+    "peaceful reflective room",
+    "minimalist wellness studio"
+  ];
+
+  const lighting = [
+    "soft morning light through a window",
+    "cinematic side lighting",
+    "gentle diffused daylight",
+    "moody ambient lighting",
+    "dramatic soft shadows"
+  ];
+
+  const atmosphere = [
+    "calm contemplative mood",
+    "subtle ironic atmosphere",
+    "quiet reflective tone",
+    "thoughtful cinematic feeling",
+    "peaceful introspective mood"
+  ];
+
+  const props = [
+    "a closed laptop nearby",
+    "a stack of unmarked books",
+    "a notebook and pen resting on the floor",
+    "scattered papers on a small table",
+    "a simple wooden chair nearby"
+  ];
+
+  const env = environments[Math.floor(Math.random() * environments.length)];
+  const light = lighting[Math.floor(Math.random() * lighting.length)];
+  const mood = atmosphere[Math.floor(Math.random() * atmosphere.length)];
+  const prop = props[Math.floor(Math.random() * props.length)];
+
+  return `${scene}, set in a ${env}, ${light}, ${prop}, ${mood}`;
+}
+  
   if (scriptId) return data[0];
   return data[0].scripts;
 }
@@ -93,19 +135,20 @@ function buildImagePrompt(script) {
     .replace('Mr Oldverdict', '')
     .trim();
 
+  const directedScene = visualDirector(sceneDirection);
+
   return `
 ${style},
 ${styleHint},
-symbolic artistic interpretation,
-dreamlike atmosphere,
-visual metaphor,
-conceptual imagery inspired by: ${sceneDirection},
-no identifiable characters,
-no portraits,
-no narrator figure,
-artistic composition,
-soft cinematic lighting,
-depth and texture,
+artistic editorial illustration,
+cinematic lighting,
+visual storytelling composition,
+scene inspired by: ${directedScene},
+no narrator character,
+no close-up portrait,
+no text or numbers,
+detailed environment,
+soft cinematic depth,
 vertical composition,
 9:16 frame
 `;
