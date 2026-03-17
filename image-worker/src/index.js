@@ -106,20 +106,6 @@ vertical composition,
 9:16 frame
 `;
 }
-Scene:
-${scene}
-
-Create a strong visual metaphor representing this situation.
-
-${style}
-
-high quality image,
-detailed environment,
-clear storytelling,
-vertical composition,
-9:16 frame
-`;
-}
 
 async function initiateImageGeneration(leonardoKey, prompt) {
 
