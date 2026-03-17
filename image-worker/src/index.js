@@ -82,6 +82,7 @@ async function getScriptForImage(supabaseUrl, supabaseKey, scriptId) {
 function buildImagePrompt(script) {
 
   const style = STYLE_POOL[Math.floor(Math.random() * STYLE_POOL.length)];
+  const styleHint = STYLE_HINTS[Math.floor(Math.random() * STYLE_HINTS.length)];
 
   const sceneDirection = script.scene
     .replace('Mr. Oldverdict', '')
@@ -90,15 +91,19 @@ function buildImagePrompt(script) {
 
   return `
 ${style},
+${styleHint},
 symbolic artistic interpretation,
 dreamlike atmosphere,
-metaphorical visual storytelling,
-soft cinematic lighting,
-subtle depth and texture,
-no literal actors,
-no identifiable characters,
+visual metaphor,
 conceptual imagery inspired by: ${sceneDirection},
-vertical composition, 9:16
+no identifiable characters,
+no portraits,
+no narrator figure,
+artistic composition,
+soft cinematic lighting,
+depth and texture,
+vertical composition,
+9:16 frame
 `;
 }
 Scene:
