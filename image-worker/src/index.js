@@ -106,7 +106,6 @@ vertical composition,
 9:16 frame
 `;
 }
-
 async function initiateImageGeneration(leonardoKey, prompt) {
 
   const body = {
