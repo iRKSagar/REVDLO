@@ -8,7 +8,20 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Authorization, Content-Type',
 };
-
+const STYLE_POOL = [
+  "surreal oil painting",
+  "ink wash illustration",
+  "watercolor dreamscape",
+  "charcoal sketch illustration",
+  "paper cut collage artwork",
+  "impressionist painting",
+  "minimalist graphic poster",
+  "abstract conceptual art",
+  "vintage illustration",
+  "dreamlike cinematic still",
+  "storybook illustration",
+  "symbolic surreal art"
+];
 const STYLE_HINTS = [
   "cinematic lighting",
   "dramatic contrast",
@@ -68,16 +81,26 @@ async function getScriptForImage(supabaseUrl, supabaseKey, scriptId) {
 
 function buildImagePrompt(script) {
 
-  let scene = script.scene || "";
+  const style = STYLE_POOL[Math.floor(Math.random() * STYLE_POOL.length)];
 
-  scene = scene
-    .replace("Mr. Oldverdict", "")
-    .replace("Mr Oldverdict", "")
+  const sceneDirection = script.scene
+    .replace('Mr. Oldverdict', '')
+    .replace('Mr Oldverdict', '')
     .trim();
 
-  const style = randomStyle();
-
   return `
+${style},
+symbolic artistic interpretation,
+dreamlike atmosphere,
+metaphorical visual storytelling,
+soft cinematic lighting,
+subtle depth and texture,
+no literal actors,
+no identifiable characters,
+conceptual imagery inspired by: ${sceneDirection},
+vertical composition, 9:16
+`;
+}
 Scene:
 ${scene}
 
