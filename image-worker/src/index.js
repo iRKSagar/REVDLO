@@ -61,24 +61,6 @@ function randomStyle() {
   return STYLE_HINTS[Math.floor(Math.random() * STYLE_HINTS.length)];
 }
 
-async function getScriptForImage(supabaseUrl, supabaseKey, scriptId) {
-
-  const url = scriptId
-    ? `${supabaseUrl}/rest/v1/scripts?id=eq.${scriptId}&limit=1`
-    : `${supabaseUrl}/rest/v1/videos?image_url=is.null&order=created_at.asc&limit=1&select=script_id,scripts(*)`;
-
-  const response = await fetch(url, {
-    headers: {
-      'apikey': supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`
-    }
-  });
-
-  if (!response.ok) throw new Error('Failed to fetch from Supabase');
-
-  const data = await response.json();
-  if (data.length === 0) throw new Error('No scripts pending image generation');
-
 function visualDirector(scene) {
 
   const environments = [
@@ -120,7 +102,25 @@ function visualDirector(scene) {
 
   return `${scene}, set in a ${env}, ${light}, ${prop}, ${mood}`;
 }
-  
+
+async function getScriptForImage(supabaseUrl, supabaseKey, scriptId) {
+
+  const url = scriptId
+    ? `${supabaseUrl}/rest/v1/scripts?id=eq.${scriptId}&limit=1`
+    : `${supabaseUrl}/rest/v1/videos?image_url=is.null&order=created_at.asc&limit=1&select=script_id,scripts(*)`;
+
+  const response = await fetch(url, {
+    headers: {
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`
+    }
+  });
+
+  if (!response.ok) throw new Error('Failed to fetch from Supabase');
+
+  const data = await response.json();
+  if (data.length === 0) throw new Error('No scripts pending image generation');
+
   if (scriptId) return data[0];
   return data[0].scripts;
 }
