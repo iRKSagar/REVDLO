@@ -36,11 +36,15 @@ const STYLE_HINTS = [
 ];
 
 const NEGATIVE_PROMPT = `
+human,
+person,
+portrait,
+face,
+selfie,
 old man,
 elderly narrator,
 wise man,
 talking character,
-portrait,
 close up face,
 text,
 logo,
@@ -106,6 +110,8 @@ vertical composition,
 9:16 frame
 `;
 }
+
+
 async function initiateImageGeneration(leonardoKey, prompt) {
 
   const body = {
