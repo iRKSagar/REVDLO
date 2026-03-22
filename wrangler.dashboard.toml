@@ -1,0 +1,11 @@
+name = "mroldverdict-dashboard"
+main = "dashboard-worker/src/index.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+SUPABASE_URL = "https://cfxpgtrtctujaxdoqfds.supabase.co"
+MODAL_PIPELINE_URL = "https://your-workspace--mr-oldverdict-web.modal.run"
+MODAL_HEALTH_URL = "https://your-workspace--mr-oldverdict-web.modal.run/"
+
+[[triggers]]
+crons = ["*/5 * * * *"]
