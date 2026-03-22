@@ -4,3 +4,7 @@ compatibility_date = "2024-01-01"
 
 [vars]
 WORKER_DOMAIN = "revdlo1.rkinfoarch.workers.dev"
+
+name = "mroldverdict-dashboard"
+main = "dashboard-worker/src/index.js"
+compatibility_date = "2024-01-01"
