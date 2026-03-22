@@ -1207,7 +1207,7 @@ def videos_incomplete():
     memory=2048,
     timeout=600
 )
-@modal.asgi_app()
+@modal.wsgi_app()
 def web():
     return app
 
