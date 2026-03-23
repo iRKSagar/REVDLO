@@ -227,13 +227,13 @@ export default {
     }
   },
 
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(
-      fetch(`https://${env.WORKER_DOMAIN}/`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${env.COUNCIL_SECRET}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-      })
-    );
-  }
-};
+//  async scheduled(event, env, ctx) {
+  //  ctx.waitUntil(
+    //  fetch(`https://${env.WORKER_DOMAIN}/`, {
+   //     method: 'POST',
+   //     headers: { 'Authorization': `Bearer ${env.COUNCIL_SECRET}`, 'Content-Type': 'application/json' },
+   //     body: JSON.stringify({})
+  //    })
+ //   );
+//  }
+//};
